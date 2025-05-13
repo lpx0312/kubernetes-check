@@ -1,0 +1,26 @@
+实现架构思路
+text+----------------+     +-----------------+                    |  Master节点    |     |  Worker节点     |                    | (运行Go程序)   |     | (被监控节点)    |                    +-------+--------+     +--------+--------+                            |                        |                            |                        |                  +---------v--------+       +-------v-------+                  | Kubernetes API   |       | 节点指标采集方式 |                  | 获取节点基础状态  |       | (SSH/APIServer) |                  +-------------------+       +----------------+
+具体实现步骤
+1. 通过Kubernetes API获取节点资源压力状态
+go// 获取所有节点的压力状态func GetNodePressures() map[string]*NodePressure {    nodes, _ := k8sClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})        pressures := make(map[string]*NodePressure)    for _, node := range nodes.Items {        p := &NodePressure{NodeName: node.Name}                // 解析节点Condition（K8s内置压力检测）        for _, cond := range node.Status.Conditions {            switch cond.Type {            case v1.NodeMemoryPressure:                p.MemoryPressure = cond.Status == v1.ConditionTrue            case v1.NodeDiskPressure:                p.DiskPressure = cond.Status == v1.ConditionTrue            case v1.NodePIDPressure:                p.PIDPressure = cond.Status == v1.ConditionTrue            }        }                pressures[node.Name] = p    }    return pressures}这只能获取K8s内置的布尔型压力状态，无法获得具体数值指标
+
+2. 获取详细资源指标的两种方式
+方式一：通过Metrics Server API（推荐）
+go// 需要先确认集群已安装metrics-serverfunc GetNodeMetrics(nodeName string) (*NodeMetrics, error) {    metrics, err := metricsClient.MetricsV1beta1().NodeMetricses().Get(        context.TODO(),         nodeName,         metav1.GetOptions{}    )        return &NodeMetrics{        CPU:    metrics.Usage.Cpu().MilliValue(),        Memory: metrics.Usage.Memory().Value(),    }, err}需要RBAC权限：resources: [nodes/metrics], verbs: [get]
+方式二：通过SSH到节点执行命令（备选）
+go// 建立SSH连接获取节点数据func GetSSHNodeMetrics(nodeIP string) (*NodeMetrics, error) {    config := &ssh.ClientConfig{        User: "root",        Auth: []ssh.AuthMethod{            ssh.PublicKeys(loadPrivateKey("/path/to/ssh_key")),        },        HostKeyCallback: ssh.InsecureIgnoreHostKey(),    }        conn, _ := ssh.Dial("tcp", nodeIP+":22", config)    session, _ := conn.NewSession()        // 获取内存使用率    memOut, _ := session.Output("free | awk '/Mem/{printf \"%.1f\", $3/$2*100}'")    memUsage, _ := strconv.ParseFloat(strings.TrimSpace(string(memOut)), 64)        // 获取磁盘使用率    diskOut, _ := session.Output("df / | awk 'END{print $5}' | tr -d '%'")    diskUsage, _ := strconv.Atoi(strings.TrimSpace(string(diskOut)))        return &NodeMetrics{        MemUsage:  memUsage,        DiskUsage: float64(diskUsage),    }, nil}
+3. PID耗尽检测的特殊处理
+go// 通过SSH获取节点PID使用量func GetNodePidUsage(nodeIP string) (int, int, error) {    session := createSSHSession(nodeIP) // 创建SSH连接        // 获取当前PID数量    pidCountOut, _ := session.Output("ls -1 /proc | grep -E '^[0-9]+$' | wc -l")    pidCount, _ := strconv.Atoi(strings.TrimSpace(string(pidCountOut)))        // 获取系统PID上限    pidMaxOut, _ := session.Output("cat /proc/sys/kernel/pid_max")    pidMax, _ := strconv.Atoi(strings.TrimSpace(string(pidMaxOut)))        return pidCount, pidMax, nil}
+权限配置要点
+yaml# 需要的ClusterRole配置apiVersion: rbac.authorization.k8s.io/v1kind: ClusterRolemetadata:  name: node-monitorrules:- apiGroups: [""]  resources: ["nodes", "nodes/stats"]  verbs: ["get", "list", "watch"]- apiGroups: ["metrics.k8s.io"]  resources: ["nodes"]  verbs: ["get", "list"]
+完整数据采集流程
+gofunc CollectAllNodeMetrics() []NodePressure {    // 步骤1：获取所有节点列表    nodes, _ := k8sClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})        var results []NodePressure        for _, node := range nodes.Items {        pressure := NodePressure{NodeName: node.Name}                // 步骤2：获取基础压力状态        for _, cond := range node.Status.Conditions {            // ...同前面代码...        }                // 步骤3：获取详细指标        if metrics, err := GetNodeMetrics(node.Name); err == nil {            pressure.MemUsage = float64(metrics.Memory) / 1e9 // 转换为GB        }                // 步骤4：通过SSH获取特殊指标        if nodeIP := getNodeInternalIP(node); nodeIP != "" {            if pidCount, pidMax, err := GetNodePidUsage(nodeIP); err == nil {                pressure.PIDUsage = float64(pidCount)/float64(pidMax)*100            }        }                results = append(results, pressure)    }    return results}
+关键注意事项
+
+网络连通性：确保Master可以访问各节点的kubelet端口（默认10250）和SSH端口
+性能优化：go// 使用缓存减少API调用var nodeMetricsCache map[string]cachedMetric func GetCachedMetrics(nodeName string) (NodeMetrics, error) {    if cache, ok := nodeMetricsCache[nodeName]; ok && time.Since(cache.Timestamp) < 5*time.Minute {        return cache.Data, nil    }    // ...重新获取数据...}
+错误处理：
+
+处理部分节点不可达的情况
+设置SSH连接超时（建议5秒）
+指标采集失败时保留旧数据并标记状态
