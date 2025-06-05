@@ -183,13 +183,15 @@ func main() {
             tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
         )
         table.SetColumnColor(
-            tablewriter.Colors{tablewriter.FgHiGreenColor},
-            tablewriter.Colors{tablewriter.FgHiCyanColor},
-            tablewriter.Colors{tablewriter.FgHiWhiteColor},
-            tablewriter.Colors{tablewriter.FgHiMagentaColor},
-            tablewriter.Colors{tablewriter.FgHiYellowColor},
-            tablewriter.Colors{tablewriter.FgHiBlueColor},
-            tablewriter.Colors{tablewriter.FgHiCyanColor},
+            tablewriter.Colors{tablewriter.FgHiGreenColor},     // 节点名称
+            tablewriter.Colors{tablewriter.FgHiCyanColor},      // IP地址
+            tablewriter.Colors{tablewriter.FgHiWhiteColor},     // CPU使用量
+            tablewriter.Colors{tablewriter.FgHiMagentaColor},   // 总CPU
+            tablewriter.Colors{tablewriter.FgHiYellowColor},    // CPU使用率%
+            tablewriter.Colors{tablewriter.FgHiBlueColor},      // 内存使用量
+            tablewriter.Colors{tablewriter.FgHiCyanColor},      // 总内存
+            tablewriter.Colors{tablewriter.FgHiMagentaColor},   // 内存使用率%
+            tablewriter.Colors{tablewriter.FgHiYellowColor},    // 状态
         )
     } else {
         table.SetHeaderColor(
@@ -201,6 +203,7 @@ func main() {
             tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlueColor},
             tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
             tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiMagentaColor},
+            tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiYellowColor},
         )
         table.SetColumnColor(
             tablewriter.Colors{tablewriter.FgHiGreenColor},
@@ -210,7 +213,8 @@ func main() {
             tablewriter.Colors{tablewriter.FgHiYellowColor},
             tablewriter.Colors{tablewriter.FgHiBlueColor},
             tablewriter.Colors{tablewriter.FgHiCyanColor},
-            tablewriter.Colors{tablewriter.FgHiMagentaColor},
+            tablewriter.Colors{tablewriter.FgHiMagentaColor},  // 添加逗号
+            tablewriter.Colors{tablewriter.FgHiYellowColor},
         )
     }
 
@@ -445,9 +449,10 @@ func displayNodeMetrics(clientset *kubernetes.Clientset, metricsClient *metrics.
     }
 
     table := tablewriter.NewWriter(os.Stdout)
-    table.SetHeader([]string{"节点名称", "CPU使用量(cores)", "总CPU(cores)", "CPU使用率%", "内存使用量(Mi)", "总内存(Mi)", "内存使用率%", "状态"})
+    table.SetHeader([]string{"节点名称", "IP地址", "CPU使用量(cores)", "总CPU(cores)", "CPU使用率%", "内存使用量(Mi)", "总内存(Mi)", "内存使用率%", "状态"})
     table.SetColumnAlignment([]int{
         tablewriter.ALIGN_LEFT,   // 节点名称
+        tablewriter.ALIGN_LEFT,   // IP地址
         tablewriter.ALIGN_RIGHT,  // CPU使用量
         tablewriter.ALIGN_RIGHT,  // CPU总量
         tablewriter.ALIGN_RIGHT,  // CPU使用率
@@ -468,16 +473,18 @@ func displayNodeMetrics(clientset *kubernetes.Clientset, metricsClient *metrics.
         tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlueColor},
         tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
         tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiMagentaColor},
+        tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiYellowColor},
     )
     table.SetColumnColor(
-        tablewriter.Colors{tablewriter.FgHiGreenColor},
-        tablewriter.Colors{tablewriter.FgHiCyanColor},
-        tablewriter.Colors{tablewriter.FgHiWhiteColor},
-        tablewriter.Colors{tablewriter.FgHiMagentaColor},
-        tablewriter.Colors{tablewriter.FgHiYellowColor},
-        tablewriter.Colors{tablewriter.FgHiBlueColor},
-        tablewriter.Colors{tablewriter.FgHiCyanColor},
-        tablewriter.Colors{tablewriter.FgHiMagentaColor},
+        tablewriter.Colors{tablewriter.FgHiGreenColor},     // 节点名称
+        tablewriter.Colors{tablewriter.FgHiCyanColor},      // IP地址
+        tablewriter.Colors{tablewriter.FgHiWhiteColor},     // CPU使用量
+        tablewriter.Colors{tablewriter.FgHiMagentaColor},   // 总CPU
+        tablewriter.Colors{tablewriter.FgHiYellowColor},    // CPU使用率%
+        tablewriter.Colors{tablewriter.FgHiBlueColor},      // 内存使用量
+        tablewriter.Colors{tablewriter.FgHiCyanColor},      // 总内存
+        tablewriter.Colors{tablewriter.FgHiMagentaColor},   // 内存使用率%
+        tablewriter.Colors{tablewriter.FgHiYellowColor},    // 状态
     )
 
     for _, node := range nodes.Items {
@@ -498,6 +505,7 @@ func displayNodeMetrics(clientset *kubernetes.Clientset, metricsClient *metrics.
 
         table.Append([]string{
             node.Name,
+            getNodeIP(clientset, node.Name),  // 新增IP地址
             fmt.Sprintf("%dm", metrics.CPU),
             fmt.Sprintf("%dm", metrics.TotalCPU),
             fmt.Sprintf("%.0f%%", metrics.CPUUsage),
