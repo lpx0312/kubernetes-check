@@ -6,20 +6,19 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-// TableWriter wraps tablewriter.Table with custom methods
+// TableWriter 表格写入器
 type TableWriter struct {
 	*tablewriter.Table
 }
 
-// NewTableWriter creates a new TableWriter with default settings
+// NewTableWriter 创建表格写入器
 func NewTableWriter(writer io.Writer) *TableWriter {
 	table := tablewriter.NewWriter(writer)
 	table.SetBorder(false)
-	table.SetAutoFormatHeaders(false)
 	return &TableWriter{Table: table}
 }
 
-// SetPodColumns sets the table columns for pod display
+// SetPodColumns 设置 Pod 结果列
 func (tw *TableWriter) SetPodColumns(abnormal bool) {
 	if abnormal {
 		tw.SetHeader([]string{"命名空间", "Pod名称", "状态", "节点IP", "就绪状态", "运行时长", "容器状态"})
@@ -28,7 +27,7 @@ func (tw *TableWriter) SetPodColumns(abnormal bool) {
 	}
 }
 
-// SetNodeColumns sets the table columns for node display
+// SetNodeColumns 设置节点结果列
 func (tw *TableWriter) SetNodeColumns() {
 	tw.SetHeader([]string{"节点名称", "IP地址", "CPU使用量(cores)", "总CPU(cores)", "CPU使用率%", "内存使用量(Mi)", "总内存(Mi)", "内存使用率%", "状态"})
 }
