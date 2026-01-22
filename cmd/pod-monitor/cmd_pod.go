@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -14,6 +13,7 @@ import (
 
 	"pod-monitor/internal/log"
 	"pod-monitor/pkg/k8s"
+	"pod-monitor/pkg/output"
 )
 
 var (
@@ -274,15 +274,9 @@ func preloadNodeCache(clientset *kubernetes.Clientset, cache *sync.Map) {
 }
 
 func displayPodResults(results []*PodResult) {
-	table := tablewriter.NewWriter(os.Stdout)
-
-	if podAbnormal {
-		table.SetHeader([]string{"命名空间", "Pod名称", "状态", "节点IP", "就绪状态", "运行时长", "容器状态"})
-	} else {
-		table.SetHeader([]string{"命名空间", "Pod名称", "状态", "节点IP", "重启次数", "最后重启时间", "重启原因", "就绪状态"})
-	}
-
-	table.SetBorder(false)
+	table := output.NewTableWriter(os.Stdout)
+	table.SetPodColumns(podAbnormal)
+	output.ApplyPodColors(table, podAbnormal)
 
 	for _, r := range results {
 		if podAbnormal {

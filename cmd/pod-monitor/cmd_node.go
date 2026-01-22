@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/olekukonko/tablewriter"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -12,6 +11,7 @@ import (
 
 	"pod-monitor/internal/log"
 	"pod-monitor/pkg/k8s"
+	"pod-monitor/pkg/output"
 )
 
 var nodeCmd = &cobra.Command{
@@ -157,9 +157,9 @@ func getNodeStatus(node *v1.Node) string {
 
 // displayNodeResults 显示节点监控结果
 func displayNodeResults(results []*NodeMetrics) {
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"节点名称", "IP地址", "CPU使用量", "总CPU", "CPU使用率%", "内存使用量", "总内存", "内存使用率%", "状态"})
-	table.SetBorder(false)
+	table := output.NewTableWriter(os.Stdout)
+	table.SetNodeColumns()
+	output.ApplyNodeColors(table)
 
 	for _, r := range results {
 		table.Append([]string{
