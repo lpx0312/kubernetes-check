@@ -10,6 +10,7 @@ var (
 	kubeconfig string
 	workers    int
 	verbose    bool
+	quiet      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -27,6 +28,8 @@ var rootCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if verbose {
 			log.Stdout = log.New("debug", true)
+		} else if quiet {
+			log.Stdout = log.New("error", true)
 		}
 	},
 }
@@ -38,4 +41,6 @@ func init() {
 		"并发处理的工作协程数")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false,
 		"详细输出模式")
+	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false,
+		"静默模式(只显示错误和结果)")
 }

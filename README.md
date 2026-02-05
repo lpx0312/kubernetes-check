@@ -94,8 +94,14 @@ go build -o pod-monitor.exe ./cmd/pod-monitor/
 <details>
 <summary>Linux 构建</summary>
 
+**Bash (Linux/macOS)**
 ```bash
-GOOS=linux GOARCH=amd64 go build -o pod-monitor-linux ./cmd/pod-monitor/
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o pod-monitor-linux ./cmd/pod-monitor/
+```
+
+**PowerShell (Windows)**
+```powershell
+$env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o pod-monitor-linux ./cmd/pod-monitor/
 ```
 
 </details>
@@ -154,6 +160,7 @@ GOOS=darwin GOARCH=amd64 go build -o pod-monitor-macos ./cmd/pod-monitor/
 | `--kubeconfig` | - | - | kubeconfig 文件的绝对路径 |
 | `--workers` | `-w` | 10 | 并发处理的工作协程数 |
 | `--verbose` | `-v` | false | 详细输出模式 |
+| `--quiet` | `-q` | false | 静默模式(只显示错误和结果) |
 
 ### Pod 检查命令 (`pod`)
 
