@@ -13,7 +13,7 @@
 ## ✨ 特性
 
 - 🎯 **Pod 重启检查** - 快速查找指定时间范围内重启的 Pod
-- 🔍 **Pod 异常检测** - 智能识别异常状态的 Pod(Pending/Failed/Container Error)
+- 🔍 **Pod 异常检测** - 智能识别异常状态的 Pod(Pending/Failed/Container Error/Terminating)
 - 📊 **节点资源监控** - 实时查看节点 CPU/内存使用率和状态
 - ⚡ **高性能并发** - Worker Pool 并发处理,支持可配置并发度
 - 🏗️ **模块化架构** - 清晰的代码结构,易于扩展和维护

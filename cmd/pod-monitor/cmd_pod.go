@@ -172,6 +172,11 @@ func analyzePod(pod v1.Pod, nodeCache *sync.Map) *PodResult {
 }
 
 func isPodAbnormal(pod v1.Pod) bool {
+	// 标记正在被删除的 Pod 为异常
+	if pod.DeletionTimestamp != nil {
+		return true
+	}
+
 	if pod.Status.Phase != v1.PodRunning && pod.Status.Phase != v1.PodSucceeded {
 		return true
 	}
