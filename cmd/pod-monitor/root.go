@@ -11,6 +11,7 @@ var (
 	workers    int
 	verbose    bool
 	quiet      bool
+	noHeader   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -43,4 +44,6 @@ func init() {
 		"详细输出模式")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false,
 		"静默模式(只显示错误和结果)")
+	rootCmd.PersistentFlags().BoolVar(&noHeader, "no-header", false,
+		"不显示结果表格的标题")
 }

@@ -44,38 +44,41 @@ go mod download
 
 ```bash
 # 查看 Pod 重启情况(默认7天内)
-go run cmd/pod-monitor/main.go pod
+go run ./cmd/pod-monitor pod
 
 # 查看最近3天内重启的 Pod
-go run cmd/pod-monitor/main.go pod --days=3
+go run ./cmd/pod-monitor pod --days=3
 
 # 查看异常状态的 Pod
-go run cmd/pod-monitor/main.go pod --abnormal
+go run ./cmd/pod-monitor pod --abnormal
 
 # 查看所有命名空间的异常 Pod
-go run cmd/pod-monitor/main.go pod --abnormal --all-namespaces
+go run ./cmd/pod-monitor pod --abnormal --all-namespaces
 
 # 查看特定命名空间
-go run cmd/pod-monitor/main.go pod --namespace=kube-system --abnormal
+go run ./cmd/pod-monitor pod --namespace=kube-system --abnormal
 
 # 使用20个并发worker加速处理
-go run cmd/pod-monitor/main.go pod --workers=20 --abnormal
+go run ./cmd/pod-monitor pod --workers=20 --abnormal
 
 # 查看节点资源使用情况
-go run cmd/pod-monitor/main.go node
+go run ./cmd/pod-monitor node
 ```
+
+> **注意**: 如果你之前执行过跨平台构建命令(如构建 Linux 版本)，请确保重置 `GOOS` 环境变量，否则在 Windows 下直接运行可能会失败。
+> PowerShell: `$env:GOOS="windows"` 或 `$env:GOOS=""`
 
 #### 查看帮助
 
 ```bash
 # 查看根命令帮助
-go run cmd/pod-monitor/main.go --help
+go run ./cmd/pod-monitor --help
 
 # 查看 Pod 命令帮助
-go run cmd/pod-monitor/main.go pod --help
+go run ./cmd/pod-monitor pod --help
 
 # 查看 Node 命令帮助
-go run cmd/pod-monitor/main.go node --help
+go run ./cmd/pod-monitor node --help
 ```
 
 ### 3️⃣ 构建可执行文件
@@ -161,6 +164,7 @@ GOOS=darwin GOARCH=amd64 go build -o pod-monitor-macos ./cmd/pod-monitor/
 | `--workers` | `-w` | 10 | 并发处理的工作协程数 |
 | `--verbose` | `-v` | false | 详细输出模式 |
 | `--quiet` | `-q` | false | 静默模式(只显示错误和结果) |
+| `--no-header` | - | false | 不显示结果表格的标题 |
 
 ### Pod 检查命令 (`pod`)
 

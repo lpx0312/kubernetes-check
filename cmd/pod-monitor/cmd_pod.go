@@ -279,6 +279,14 @@ func preloadNodeCache(clientset *kubernetes.Clientset, cache *sync.Map) {
 }
 
 func displayPodResults(results []*PodResult) {
+	if !noHeader {
+		if podAbnormal {
+			fmt.Println("\n>>> Pod 异常检测结果:")
+		} else {
+			fmt.Println("\n>>> Pod 重启检查结果:")
+		}
+	}
+
 	table := output.NewTableWriter(os.Stdout)
 	table.SetPodColumns(podAbnormal)
 	output.ApplyPodColors(table, podAbnormal)

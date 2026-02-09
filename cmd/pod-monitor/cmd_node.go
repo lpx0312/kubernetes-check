@@ -157,6 +157,10 @@ func getNodeStatus(node *v1.Node) string {
 
 // displayNodeResults 显示节点监控结果
 func displayNodeResults(results []*NodeMetrics) {
+	if !noHeader {
+		fmt.Println("\n>>> 节点资源监控结果:")
+	}
+
 	table := output.NewTableWriter(os.Stdout)
 	table.SetNodeColumns()
 	output.ApplyNodeColors(table)

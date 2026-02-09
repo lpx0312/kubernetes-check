@@ -6,6 +6,8 @@
 *.so
 *.dylib
 
+pod-monitor-linux
+pod-monitor.exe
 # Test binary, built with `go test -c`
 *.test
 
