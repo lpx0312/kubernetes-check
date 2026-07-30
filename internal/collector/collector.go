@@ -104,11 +104,62 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 		c.collectPods(ctx, rep, true)
 	case report.ModeRestart:
 		c.collectPods(ctx, rep, false)
+	case report.ModeFull:
+		// 全量巡检：一次采齐节点 + 异常 + 重启，复用现有采集方法
+		c.collectNodes(ctx, rep)
+		c.collectPods(ctx, rep, true)  // 异常
+		c.collectPods(ctx, rep, false) // 重启
+		c.computeSummary(rep)
 	default:
 		c.collectPods(ctx, rep, false)
 	}
 
 	return rep, nil
+}
+
+// computeSummary 计算全量模式的巡检摘要。
+// 健康度判定：存在异常节点(NotReady)或 metrics-server 缺失为"严重"；
+// 存在异常 Pod 或重启 Pod 为"警告"；否则为"健康"。
+func (c *Collector) computeSummary(rep *report.Report) {
+	abnormalNodes := 0
+	for _, n := range rep.NodeRows {
+		if n.Status != "正常" {
+			abnormalNodes++
+		}
+	}
+
+	summary := report.ReportSummary{
+		TotalNodes:    len(rep.NodeRows),
+		AbnormalNodes: abnormalNodes,
+		TotalPods:     rep.TotalPods,
+		AbnormalPods:  len(rep.AbnormalRows),
+		RestartedPods: len(rep.RestartRows),
+	}
+
+	// 健康度判定（优先级：严重 > 警告 > 健康）
+	switch {
+	case abnormalNodes > 0 || c.metricsUnavailable(rep):
+		summary.OverallHealth = report.HealthSevere
+	case len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0:
+		summary.OverallHealth = report.HealthWarn
+	default:
+		summary.OverallHealth = report.HealthOK
+	}
+
+	rep.Summary = summary
+}
+
+// metricsUnavailable 根据 Notes 判断是否因 metrics-server 缺失导致节点数据缺失。
+func (c *Collector) metricsUnavailable(rep *report.Report) bool {
+	// 节点数据为空且 Notes 含降级提示，视为 metrics 不可用
+	if len(rep.NodeRows) == 0 {
+		for _, note := range rep.Notes {
+			if strings.Contains(note, "Metrics API 不可用") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // collectNodes 采集所有节点的资源指标。

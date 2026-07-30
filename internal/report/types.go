@@ -9,6 +9,14 @@ const (
 	ModeRestart  = "restart"  // 重启检查：展示 N 天内重启的 Pod
 	ModeAbnormal = "abnormal" // 异常检查：展示状态异常的 Pod
 	ModeNode     = "node"     // 节点监控：展示节点资源使用情况
+	ModeFull     = "full"     // 全量巡检：节点 + 异常 + 重启，用于生成完整报告
+)
+
+// 健康度等级常量，供 ReportSummary.OverallHealth 使用。
+const (
+	HealthOK     = "健康" // 异常Pod=0 且 重启Pod=0 且 异常节点=0
+	HealthWarn   = "警告" // 存在异常Pod 或 重启Pod>0
+	HealthSevere = "严重" // 存在异常节点(NotReady) 或 metrics-server 缺失
 )
 
 // RestartPodRow 重启检查模式下的一行结果。
@@ -49,6 +57,16 @@ type NodeRow struct {
 	Status      string // "正常" / "异常"
 }
 
+// ReportSummary 巡检摘要，由全量模式下 Collector 计算，渲染到报告顶部。
+type ReportSummary struct {
+	TotalNodes    int
+	AbnormalNodes int // NotReady 或指标获取失败的节点数
+	TotalPods     int
+	AbnormalPods  int
+	RestartedPods int
+	OverallHealth string // Health* 常量之一
+}
+
 // Report 一次巡检的完整结果，是 Collector 与 Renderer 之间的契约。
 type Report struct {
 	Mode        string // 见 Mode* 常量
@@ -59,6 +77,10 @@ type Report struct {
 	RestartRows  []RestartPodRow
 	AbnormalRows []AbnormalPodRow
 	NodeRows     []NodeRow
+
+	// Summary 全量模式下的巡检摘要，由 computeSummary 填充。
+	// 非全量模式（终端表格）下为零值，不影响渲染。
+	Summary ReportSummary
 
 	// Notes 收集过程中的提示信息（如 metrics-server 未安装的降级提示），
 	// Renderer 会将其与表格一起输出。

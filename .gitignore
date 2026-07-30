@@ -22,3 +22,4 @@ k8s-patrol-linux
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+*.html
