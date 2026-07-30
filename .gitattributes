@@ -1,0 +1,16 @@
+# 强制文本文件在仓库中使用 LF 换行符
+# 解决 Windows 开发机 autocrlf 导致 CI 的 gofmt 检查失败问题
+* text=auto eol=lf
+
+# Go 源码必须用 LF（gofmt 强制要求）
+*.go text eol=lf
+
+# Windows 脚本保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件
+*.exe binary
+*.png binary
+*.jpg binary
