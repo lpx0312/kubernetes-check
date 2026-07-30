@@ -9,9 +9,12 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Built binaries (k8s-patrol)
-k8s-patrol
-k8s-patrol-linux
+# Built binaries (k8s-patrol) — 锚定根目录，避免误忽略 cmd/k8s-patrol/ 源码目录
+/k8s-patrol
+/k8s-patrol-linux
+/k8s-patrol-linux-amd64
+/k8s-patrol-linux-arm64
+/k8s-patrol-arm64.exe
 
 # ZCode session artifacts
 .zcode/

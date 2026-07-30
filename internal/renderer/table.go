@@ -35,6 +35,8 @@ func Render(rep *report.Report, w io.Writer) {
 		renderAbnormalPods(rep, w)
 	case report.ModeRestart:
 		renderRestartPods(rep, w)
+	case report.ModeStorage:
+		renderStorage(rep, w)
 	default:
 		renderRestartPods(rep, w)
 	}
@@ -210,6 +212,84 @@ func renderNodes(rep *report.Report, w io.Writer) {
 		})
 	}
 	table.Render()
+}
+
+// renderStorage 渲染存储检查表格：PVC 表（9列）+ 孤儿 PV 表（6列，有数据才显示）。
+func renderStorage(rep *report.Report, w io.Writer) {
+	// 无 PVC 且无孤儿 PV 时友好提示
+	if len(rep.StorageRows) == 0 && len(rep.OrphanPVRows) == 0 {
+		fmt.Fprintln(w, "✓ 无持久化存储使用")
+		return
+	}
+
+	// PVC 表
+	if len(rep.StorageRows) > 0 {
+		fmt.Fprintf(w, "PVC 共 %d 个\n", len(rep.StorageRows))
+		table := tablewriter.NewWriter(w)
+		// 9列：命名空间、PVC名称、状态、SC、请求量、已用、使用率、PV名称、PV状态
+		table.SetHeader([]string{"命名空间", "PVC名称", "状态", "StorageClass", "请求量", "已用", "使用率", "PV名称", "PV状态"})
+		table.SetBorder(false)
+		for _, r := range rep.StorageRows {
+			usedDisplay := formatGiTerm(r.UsedGi)
+			usageDisplay := formatUsageTerm(r.Mounted, r.UsagePct)
+			pvPhaseDisplay := r.PVPhase
+			if pvPhaseDisplay == "" {
+				pvPhaseDisplay = "-"
+			}
+			table.Append([]string{
+				r.Namespace,
+				r.Name,
+				r.Phase,
+				r.StorageClass,
+				formatGiTerm(r.RequestedGi),
+				usedDisplay,
+				usageDisplay,
+				r.PVName,
+				pvPhaseDisplay,
+			})
+		}
+		table.Render()
+	}
+
+	// 孤儿 PV 表
+	if len(rep.OrphanPVRows) > 0 {
+		fmt.Fprintf(w, "\n孤儿 PV 共 %d 个（Released/Failed 且无 PVC 引用）\n", len(rep.OrphanPVRows))
+		table := tablewriter.NewWriter(w)
+		// 6列：PV名称、状态、回收策略、访问模式、绑定节点、容量
+		table.SetHeader([]string{"PV名称", "状态", "回收策略", "访问模式", "绑定节点", "容量"})
+		table.SetBorder(false)
+		for _, p := range rep.OrphanPVRows {
+			boundNode := p.BoundNode
+			if boundNode == "" {
+				boundNode = "-"
+			}
+			table.Append([]string{
+				p.Name,
+				p.Phase,
+				p.ReclaimPolicy,
+				p.AccessModes,
+				boundNode,
+				formatGiTerm(p.CapacityGi),
+			})
+		}
+		table.Render()
+	}
+}
+
+// formatGiTerm 终端版 Gi 格式化，0 显示 "-"。
+func formatGiTerm(gi int64) string {
+	if gi == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%dGi", gi)
+}
+
+// formatUsageTerm 终端版使用率格式化，未挂载显示"未挂载"。
+func formatUsageTerm(mounted bool, pct float64) string {
+	if !mounted {
+		return "未挂载"
+	}
+	return fmt.Sprintf("%.1f%%", pct)
 }
 
 // formatTime 格式化时间为北京时间字符串，零值返回 "N/A"。

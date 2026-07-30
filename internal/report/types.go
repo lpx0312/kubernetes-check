@@ -9,7 +9,8 @@ const (
 	ModeRestart  = "restart"  // 重启检查：展示 N 天内重启的 Pod
 	ModeAbnormal = "abnormal" // 异常检查：展示状态异常的 Pod
 	ModeNode     = "node"     // 节点监控：展示节点资源使用情况
-	ModeFull     = "full"     // 全量巡检：节点 + 异常 + 重启，用于生成完整报告
+	ModeStorage  = "storage"  // 存储检查：展示 PVC 绑定状态与使用量
+	ModeFull     = "full"     // 全量巡检：节点 + 异常 + 重启 + 存储，用于生成完整报告
 )
 
 // 健康度等级常量，供 ReportSummary.OverallHealth 使用。

@@ -111,6 +111,8 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 		c.collectPods(ctx, rep, true)
 	case report.ModeRestart:
 		c.collectPods(ctx, rep, false)
+	case report.ModeStorage:
+		c.collectStorage(ctx, rep)
 	case report.ModeFull:
 		// 全量巡检：一次采齐节点 + 异常 + 重启 + 存储，复用现有采集方法
 		c.collectNodes(ctx, rep)
