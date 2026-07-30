@@ -57,6 +57,34 @@ type NodeRow struct {
 	Status      string // "正常" / "异常"
 }
 
+// StorageRow 存储检查的一行结果（PVC 维度）。
+// CPU/内存单位为 Gi（1<<30 字节），使用率百分比由 Collector 计算。
+type StorageRow struct {
+	Namespace     string
+	Name          string // PVC 名
+	Phase         string // Bound / Pending / Lost
+	StorageClass  string
+	RequestedGi   int64 // 申请量（Spec.Resources.Requests）
+	CapacityGi    int64 // 实际容量（Bound 后 PV 给定的容量）
+	UsedGi        int64 // 已用（kubelet stats，未挂载=0）
+	UsagePct      float64 // 使用率 = Used / Capacity（未挂载=0）
+	Mounted       bool  // 是否被 Pod 挂载（未挂载则拿不到 usedBytes）
+	PVName        string
+	PVPhase       string // PV 的 Available/Bound/Released/Failed
+	Health        string // 正常/警告/严重（本行健康判定，用于着色）
+}
+
+// OrphanPVRow 孤儿 PV 的一行结果（Released/Failed 且无 PVC 引用）。
+// 这类 PV 占着存储后端资源却没被使用，是巡检重点。
+type OrphanPVRow struct {
+	Name          string
+	Phase         string // Released / Failed
+	ReclaimPolicy string // Retain / Delete
+	AccessModes   string // RWO/ROX/RWX 拼接
+	BoundNode     string // Spec.NodeAffinity 解析出的绑定节点（local 存储）
+	CapacityGi    int64
+}
+
 // ReportSummary 巡检摘要，由全量模式下 Collector 计算，渲染到报告顶部。
 type ReportSummary struct {
 	TotalNodes    int
@@ -64,6 +92,8 @@ type ReportSummary struct {
 	TotalPods     int
 	AbnormalPods  int
 	RestartedPods int
+	AbnormalPVC   int // Pending/Lost 的 PVC 或使用率超阈值的 PVC
+	OrphanPV      int // Released/Failed 的孤儿 PV
 	OverallHealth string // Health* 常量之一
 }
 
@@ -77,6 +107,8 @@ type Report struct {
 	RestartRows  []RestartPodRow
 	AbnormalRows []AbnormalPodRow
 	NodeRows     []NodeRow
+	StorageRows  []StorageRow
+	OrphanPVRows []OrphanPVRow
 
 	// Summary 全量模式下的巡检摘要，由 computeSummary 填充。
 	// 非全量模式（终端表格）下为零值，不影响渲染。

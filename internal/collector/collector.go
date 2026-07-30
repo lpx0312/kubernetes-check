@@ -16,6 +16,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
 
@@ -40,9 +41,11 @@ type Config struct {
 
 // Collector 巡检采集器，持有 K8s 客户端与节点缓存。
 // nodeCache 在 worker pool 间共享，sync.Map 保证并发安全。
+// restClient 用于调用 kubelet /stats/summary（Node 接口无 ProxyGet，需 REST client 代理）。
 type Collector struct {
 	clientset *kubernetes.Clientset
 	metrics   *metrics.Clientset
+	restClient rest.Interface
 	nodeCache sync.Map
 	cfg       Config
 	cluster   string // kubeconfig 当前 context 名，报告头展示用
@@ -80,12 +83,16 @@ func New(cfg Config) (*Collector, error) {
 	if err != nil {
 		return nil, err
 	}
+	// REST client：复用 clientset 的 CoreV1 RESTClient（已配好 GroupVersion/Serializer），
+	// 用于调 kubelet /stats/summary（Node 接口无 ProxyGet，需走 apiserver proxy 子资源）
+	restClient := clientset.CoreV1().RESTClient()
 
 	return &Collector{
-		clientset: clientset,
-		metrics:   metricsClient,
-		cfg:       cfg,
-		cluster:   cluster,
+		clientset:  clientset,
+		metrics:    metricsClient,
+		restClient: restClient,
+		cfg:        cfg,
+		cluster:    cluster,
 	}, nil
 }
 
@@ -105,10 +112,11 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 	case report.ModeRestart:
 		c.collectPods(ctx, rep, false)
 	case report.ModeFull:
-		// 全量巡检：一次采齐节点 + 异常 + 重启，复用现有采集方法
+		// 全量巡检：一次采齐节点 + 异常 + 重启 + 存储，复用现有采集方法
 		c.collectNodes(ctx, rep)
 		c.collectPods(ctx, rep, true)  // 异常
 		c.collectPods(ctx, rep, false) // 重启
+		c.collectStorage(ctx, rep)     // 存储（PVC + 孤儿PV + SC健康）
 		c.computeSummary(rep)
 	default:
 		c.collectPods(ctx, rep, false)
@@ -118,13 +126,33 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 }
 
 // computeSummary 计算全量模式的巡检摘要。
-// 健康度判定：存在异常节点(NotReady)或 metrics-server 缺失为"严重"；
-// 存在异常 Pod 或重启 Pod 为"警告"；否则为"健康"。
+// 健康度判定（优先级：严重 > 警告 > 健康）：
+//   - 严重：异常节点(NotReady) / metrics-server 缺失 / Lost 的 PVC / Failed 的 PV / PVC 使用率 ≥95%
+//   - 警告：异常 Pod / 重启 Pod / Pending 的 PVC(卡绑定) / Released 的孤儿 PV / PVC 使用率 85%-95%
+//   - 健康：以上都不满足
 func (c *Collector) computeSummary(rep *report.Report) {
 	abnormalNodes := 0
 	for _, n := range rep.NodeRows {
 		if n.Status != "正常" {
 			abnormalNodes++
+		}
+	}
+
+	// 统计存储维度
+	abnormalPVC, storageSevere := 0, false
+	for _, s := range rep.StorageRows {
+		if s.Health == report.HealthSevere {
+			abnormalPVC++
+			storageSevere = true
+		} else if s.Health == report.HealthWarn {
+			abnormalPVC++
+		}
+	}
+	orphanPV := len(rep.OrphanPVRows)
+	// Failed PV（孤儿表里的）也算严重
+	for _, p := range rep.OrphanPVRows {
+		if p.Phase == "Failed" {
+			storageSevere = true
 		}
 	}
 
@@ -134,13 +162,15 @@ func (c *Collector) computeSummary(rep *report.Report) {
 		TotalPods:     rep.TotalPods,
 		AbnormalPods:  len(rep.AbnormalRows),
 		RestartedPods: len(rep.RestartRows),
+		AbnormalPVC:   abnormalPVC,
+		OrphanPV:      orphanPV,
 	}
 
-	// 健康度判定（优先级：严重 > 警告 > 健康）
+	// 健康度判定
 	switch {
-	case abnormalNodes > 0 || c.metricsUnavailable(rep):
+	case abnormalNodes > 0 || c.metricsUnavailable(rep) || storageSevere:
 		summary.OverallHealth = report.HealthSevere
-	case len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0:
+	case len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0 || abnormalPVC > 0 || orphanPV > 0:
 		summary.OverallHealth = report.HealthWarn
 	default:
 		summary.OverallHealth = report.HealthOK

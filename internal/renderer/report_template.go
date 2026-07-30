@@ -130,6 +130,14 @@ const reportHTMLTemplate = `<!DOCTYPE html>
       <div class="num {{if gt .Summary.RestartedPods 0}}num-warn{{else}}num-ok{{end}}">{{.Summary.RestartedPods}}</div>
       <div class="label">近期重启 Pod</div>
     </div>
+    <div class="stat-card">
+      <div class="num {{if gt .Summary.AbnormalPVC 0}}num-warn{{else}}num-ok{{end}}">{{.Summary.AbnormalPVC}}</div>
+      <div class="label">异常 PVC</div>
+    </div>
+    <div class="stat-card">
+      <div class="num {{if gt .Summary.OrphanPV 0}}num-warn{{else}}num-ok{{end}}">{{.Summary.OrphanPV}}</div>
+      <div class="label">孤儿 PV</div>
+    </div>
   </div>
 
   {{range .Notes}}<div class="notes">{{.}}</div>{{end}}
@@ -158,6 +166,55 @@ const reportHTMLTemplate = `<!DOCTYPE html>
     </table>
   </div>
   {{end}}
+
+  <!-- 存储与卷：PVC 表 + 孤儿 PV 表 -->
+  <div class="section">
+    <h2>💾 存储与卷 <span class="count">(PVC {{len .StorageRows}} / 孤儿PV {{len .OrphanPVRows}})</span></h2>
+    {{if .HasStorage}}
+    <table>
+      <tr>
+        <th>命名空间</th><th>PVC 名称</th><th>PVC 状态</th>
+        <th>StorageClass</th><th>请求量</th><th>已用</th>
+        <th>使用率</th><th>PV 名称</th><th>PV 状态</th>
+      </tr>
+      {{range .StorageRows}}
+      <tr>
+        <td>{{.Namespace}}</td>
+        <td>{{.Name}}</td>
+        <td class="{{.PhaseClass}}">{{.Phase}}</td>
+        <td>{{.StorageClass}}</td>
+        <td>{{.RequestedDisplay}}</td>
+        <td>{{.UsedDisplay}}</td>
+        <td class="{{.UsageClass}}">{{.UsageDisplay}}</td>
+        <td>{{.PVName}}</td>
+        <td class="{{if eq .PVPhase "Bound"}}cell-ok{{else if eq .PVPhase "Available"}}cell-ok{{else if eq .PVPhase ""}}-{{else}}cell-severe{{end}}">{{if eq .PVPhase ""}}-{{else}}{{.PVPhase}}{{end}}</td>
+      </tr>
+      {{end}}
+    </table>
+    {{else}}
+    <div class="empty">✓ 无持久化存储使用</div>
+    {{end}}
+
+    {{if .HasOrphanPV}}
+    <h2 style="margin-top:20px">🗑️ 孤儿 PV <span class="count">({{len .OrphanPVRows}})</span></h2>
+    <table>
+      <tr>
+        <th>PV 名称</th><th>状态</th><th>回收策略</th>
+        <th>访问模式</th><th>绑定节点</th><th>容量</th>
+      </tr>
+      {{range .OrphanPVRows}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td class="{{.PhaseClass}}">{{.Phase}}</td>
+        <td>{{.ReclaimPolicy}}</td>
+        <td>{{.AccessModes}}</td>
+        <td>{{.BoundNode}}</td>
+        <td>{{.CapacityDisplay}}</td>
+      </tr>
+      {{end}}
+    </table>
+    {{end}}
+  </div>
 
   <!-- 异常 Pod -->
   <div class="section">
