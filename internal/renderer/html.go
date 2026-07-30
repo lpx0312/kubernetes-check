@@ -208,7 +208,10 @@ func formatGi(gi int64) string {
 	return fmt.Sprintf("%dGi", gi)
 }
 
-// formatUsageDisplay 格式化 PVC 使用率展示：未挂载显示"未挂载"，否则显示百分比。
+// formatUsageDisplay 格式化 PVC 使用率展示。
+// 未挂载的 PVC 显示"未挂载(用量未知)"，强调与"卷为空"的区别：
+// kubelet stats 只统计被 Pod 挂载的卷，未挂载的卷实际可能仍有数据，
+// 只是当前没有 Pod 使用它，因此使用量无法通过 API 获取。
 func formatUsageDisplay(mounted bool, pct float64) string {
 	if !mounted {
 		return "未挂载"

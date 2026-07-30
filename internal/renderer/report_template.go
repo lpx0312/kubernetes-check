@@ -171,6 +171,10 @@ const reportHTMLTemplate = `<!DOCTYPE html>
   <div class="section">
     <h2>💾 存储与卷 <span class="count">(PVC {{len .StorageRows}} / 孤儿PV {{len .OrphanPVRows}})</span></h2>
     {{if .HasStorage}}
+    <div class="notes" style="background:#e8f4fd;color:#0c5460">
+      使用量说明：仅统计<b>当前被 Pod 挂载</b>的卷。显示「未挂载」的 PVC 表示当前无 Pod 使用，
+      其卷内<b>可能仍有数据</b>，使用量暂不可知，并非一定为空。
+    </div>
     <table>
       <tr>
         <th>命名空间</th><th>PVC 名称</th><th>PVC 状态</th>
