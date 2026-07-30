@@ -64,10 +64,13 @@ func (c *Collector) getNodeIPOrUnknown(ctx context.Context, nodeName string) str
 // collectNodeRow 采集单个节点的资源指标，返回报告行。
 // 复用传入的 node 对象提取 IP 与状态，避免 N+1 查询。
 // CPU/内存总量统一使用 Allocatable，口径一致。
+// 当 Metrics API 对该节点返回 not found（如 kubelet rootFs 统计坏掉、metrics-server 没抓到），
+// 返回降级行（指标为零值、状态标"指标不可用"），而非丢弃该节点——
+// 这样报告里能明确显示"这个节点有问题"，而不是悄悄消失。
 func (c *Collector) collectNodeRow(ctx context.Context, node *v1.Node) (*report.NodeRow, error) {
 	nodeMetrics, err := c.metrics.MetricsV1beta1().NodeMetricses().Get(ctx, node.Name, metav1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return c.degradedNodeRow(ctx, node, err)
 	}
 
 	cpuUsage := nodeMetrics.Usage.Cpu().MilliValue()
@@ -106,6 +109,45 @@ func (c *Collector) collectNodeRow(ctx context.Context, node *v1.Node) (*report.
 		TotalMemory: totalMemory,
 		CPUUsage:    cpuUsagePercent,
 		MemoryUsage: memoryUsagePercent,
+		Status:      status,
+	}, nil
+}
+
+// degradedNodeRow 在节点指标获取失败时，返回一个占位行。
+// 关键设计：节点名/IP/Ready 状态仍从 Node 对象正常提取（这些不依赖 metrics-server），
+// 只是 CPU/内存使用量无法获取，状态标"指标不可用"以醒目提示。
+// 这样报告里会明确出现这个节点，而不是静默丢失。
+func (c *Collector) degradedNodeRow(ctx context.Context, node *v1.Node, metricsErr error) (*report.NodeRow, error) {
+	// Ready 状态仍可从 Node 对象正常判断（不依赖 metrics-server）
+	status := "指标不可用"
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady && condition.Status != v1.ConditionTrue {
+			status = "异常(指标不可用)"
+			break
+		}
+	}
+
+	ip := "N/A"
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == v1.NodeInternalIP {
+			ip = addr.Address
+			break
+		}
+	}
+
+	// 总量仍从 Allocatable 取（可用），使用量为 0
+	totalCPU := node.Status.Allocatable.Cpu().MilliValue()
+	totalMemory := node.Status.Allocatable.Memory().Value() / (1024 * 1024)
+
+	return &report.NodeRow{
+		NodeName:    node.Name,
+		IP:          ip,
+		CPU:         0,
+		Memory:      0,
+		TotalCPU:    totalCPU,
+		TotalMemory: totalMemory,
+		CPUUsage:    0,
+		MemoryUsage: 0,
 		Status:      status,
 	}, nil
 }

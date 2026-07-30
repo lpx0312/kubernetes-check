@@ -131,9 +131,15 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 //   - 警告：异常 Pod / 重启 Pod / Pending 的 PVC(卡绑定) / Released 的孤儿 PV / PVC 使用率 85%-95%
 //   - 健康：以上都不满足
 func (c *Collector) computeSummary(rep *report.Report) {
-	abnormalNodes := 0
+	abnormalNodes := 0            // 真异常节点（NotReady 或 指标不可用且异常）
+	metricsUnavailableNodes := 0  // 仅指标采集失败但节点 Ready 的（kubelet stats 坏等）
 	for _, n := range rep.NodeRows {
-		if n.Status != "正常" {
+		switch n.Status {
+		case "指标不可用":
+			// 节点 Ready，只是 metrics 没抓到 —— 算警告，不算严重
+			metricsUnavailableNodes++
+		case "异常", "异常(指标不可用)":
+			// 节点 NotReady —— 真严重
 			abnormalNodes++
 		}
 	}
@@ -158,7 +164,7 @@ func (c *Collector) computeSummary(rep *report.Report) {
 
 	summary := report.ReportSummary{
 		TotalNodes:    len(rep.NodeRows),
-		AbnormalNodes: abnormalNodes,
+		AbnormalNodes: abnormalNodes + metricsUnavailableNodes, // 摘要卡片合并展示
 		TotalPods:     rep.TotalPods,
 		AbnormalPods:  len(rep.AbnormalRows),
 		RestartedPods: len(rep.RestartRows),
@@ -167,9 +173,13 @@ func (c *Collector) computeSummary(rep *report.Report) {
 	}
 
 	// 健康度判定
+	// 严重：真异常节点(NotReady) / metrics-server 完全缺失 / 存储严重
+	// 警告：仅指标采集失败(节点Ready) / 异常Pod / 重启Pod / 存储警告
 	switch {
 	case abnormalNodes > 0 || c.metricsUnavailable(rep) || storageSevere:
 		summary.OverallHealth = report.HealthSevere
+	case metricsUnavailableNodes > 0 || len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0 || abnormalPVC > 0 || orphanPV > 0:
+		summary.OverallHealth = report.HealthWarn
 	case len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0 || abnormalPVC > 0 || orphanPV > 0:
 		summary.OverallHealth = report.HealthWarn
 	default:
@@ -217,9 +227,12 @@ func (c *Collector) collectNodes(ctx context.Context, rep *report.Report) {
 	for i := range nodes.Items {
 		row, err := c.collectNodeRow(ctx, &nodes.Items[i])
 		if err != nil {
-			log.Printf("获取节点 %s 的资源指标失败: %v", nodes.Items[i].Name, err)
-			failedCount++
+			// 这里只有在 Node 对象本身都拿不到时才会到（极罕见），降级行已在 collectNodeRow 内生成
+			log.Printf("采集节点 %s 失败: %v", nodes.Items[i].Name, err)
 			continue
+		}
+		if row.Status == "指标不可用" || row.Status == "异常(指标不可用)" {
+			failedCount++
 		}
 		rep.NodeRows = append(rep.NodeRows, *row)
 	}
