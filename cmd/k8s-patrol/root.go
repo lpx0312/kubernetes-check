@@ -16,8 +16,13 @@ var (
 	gWorkers      int
 )
 
-// 版本信息
-const version = "k8s-patrol v1.2 (Kubernetes 1.31.x compatible)"
+// 版本信息（用 var 而非 const，以便 go build -ldflags -X 在发布时注入版本号）
+// 默认值用于本地开发构建，CI/Release 流水线通过 LDFLAGS 覆盖。
+var (
+	version   = "dev"
+	commit    = "none"
+	buildDate = "unknown"
+)
 
 // rootCmd 根命令
 var rootCmd = &cobra.Command{
@@ -36,7 +41,10 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "显示版本信息",
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Println(version)
+		cmd.Printf("k8s-patrol %s\n", version)
+		cmd.Printf("  commit:     %s\n", commit)
+		cmd.Printf("  build date: %s\n", buildDate)
+		cmd.Println("  Kubernetes 1.31.x compatible")
 	},
 }
 
