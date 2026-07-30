@@ -141,3 +141,37 @@ func assertContains(t *testing.T, s, substr string) {
 		t.Errorf("输出中未找到期望内容 %q", substr)
 	}
 }
+
+// TestRenderHTML_内存超100标记 验证内存使用率>100%时正确加"含cache"标记和 Notes 说明。
+// 这是针对 workingSet/Allocatable 口径假象的回归防护。
+func TestRenderHTML_内存超100标记(t *testing.T) {
+	rep := &report.Report{
+		Mode:        report.ModeFull,
+		Cluster:     "test",
+		GeneratedAt: time.Now(),
+		Summary:     report.ReportSummary{OverallHealth: report.HealthWarn},
+		NodeRows: []report.NodeRow{
+			{NodeName: "node-100", IP: "10.0.0.1", CPU: 100, Memory: 12632, TotalCPU: 1600, TotalMemory: 12328, CPUUsage: 6.0, MemoryUsage: 102.5, Status: "正常"},
+			{NodeName: "node-normal", IP: "10.0.0.2", CPU: 100, Memory: 2000, TotalCPU: 1600, TotalMemory: 12328, CPUUsage: 6.0, MemoryUsage: 16.2, Status: "正常"},
+		},
+	}
+	var buf bytes.Buffer
+	if err := RenderHTML(rep, &buf); err != nil {
+		t.Fatalf("RenderHTML 失败: %v", err)
+	}
+	out := buf.String()
+
+	// node-100 (102.5%) 应有"含cache"标记
+	assertContains(t, out, "102.5%")
+	assertContains(t, out, "含cache")
+	// Notes 应有关于 node-100 的说明
+	assertContains(t, out, "node-100")
+	assertContains(t, out, "page cache")
+	assertContains(t, out, "free -m")
+	// node-normal (16.2%) 不应有"含cache"标记
+	assertContains(t, out, "16.2%")
+	normalSection := out[strings.Index(out, "node-normal"):]
+	if strings.Contains(normalSection, "含cache") {
+		t.Error("正常节点不应有'含cache'标记")
+	}
+}

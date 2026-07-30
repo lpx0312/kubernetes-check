@@ -65,6 +65,7 @@ type htmlNodeRow struct {
 	MemDisplay, TotalMemDisplay string
 	CPUUsage, MemoryUsage float64 // 使用率，模板渲染百分比
 	CPUClass, MemClass string // cell-warn / cell-severe / 空
+	MemOverPct bool // 内存使用率>100%，通常是 page cache 假象，模板加标记说明
 }
 
 type htmlAbnormalRow struct {
@@ -118,6 +119,7 @@ func buildHTMLData(rep *report.Report) htmlReportData {
 	}
 
 	for _, n := range rep.NodeRows {
+		memOver := n.MemoryUsage > 100
 		data.NodeRows = append(data.NodeRows, htmlNodeRow{
 			NodeName:        n.NodeName,
 			IP:              n.IP,
@@ -130,7 +132,14 @@ func buildHTMLData(rep *report.Report) htmlReportData {
 			MemoryUsage:     n.MemoryUsage,
 			CPUClass:        usageClass(n.CPUUsage, cpuWarnPct, cpuSeverePct),
 			MemClass:        usageClass(n.MemoryUsage, memWarnPct, memSeverePct),
+			MemOverPct:      memOver,
 		})
+		// 内存超 100% 的节点追加说明到 Notes（口径假象，非真实内存压力）
+		if memOver {
+			data.Notes = append(data.Notes, fmt.Sprintf(
+				"节点 %s 内存显示 %.0f%% 超过 100%%：指标含 page cache(workingSet) 且分母用 Allocatable(已扣系统预留)，多为假象，请以 free -m 的 available 为准。",
+				n.NodeName, n.MemoryUsage))
+		}
 	}
 
 	for _, a := range rep.AbnormalRows {

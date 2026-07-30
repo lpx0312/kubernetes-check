@@ -159,8 +159,8 @@ const reportHTMLTemplate = `<!DOCTYPE html>
         <td>{{.CPUDisplay}} / {{.TotalCPUDisplay}}</td>
         <td class="{{.CPUClass}}">{{printf "%.1f%%" .CPUUsage}}</td>
         <td>{{.MemDisplay}} / {{.TotalMemDisplay}}</td>
-        <td class="{{.MemClass}}">{{printf "%.1f%%" .MemoryUsage}}</td>
-        <td class="{{if eq .Status "正常"}}cell-ok{{else}}cell-severe{{end}}">{{.Status}}</td>
+        <td class="{{.MemClass}}">{{printf "%.1f%%" .MemoryUsage}}{{if .MemOverPct}} ⚠️<span title="workingSet 含 page cache，且分母 Allocatable 已扣系统预留，>100% 多为假象，看 free -m 的 available">含cache</span>{{end}}</td>
+        <td class="{{if eq .Status "正常"}}cell-ok{{else if eq .Status "指标不可用"}}cell-warn{{else if eq .Status "异常(指标不可用)"}}cell-severe{{else}}cell-severe{{end}}">{{.Status}}</td>
       </tr>
       {{end}}
     </table>
