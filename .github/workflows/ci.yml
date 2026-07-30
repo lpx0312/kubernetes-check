@@ -71,4 +71,3 @@ jobs:
           CGO_ENABLED: '0'
         run: go build -trimpath -ldflags="-s -w" -o /tmp/k8s-patrol-test ./cmd/k8s-patrol/
 
-# reindexed at 1785427157
