@@ -116,9 +116,9 @@ func TestRenderHTML_空数据友好提示(t *testing.T) {
 // TestUsageClass 验证阈值判定逻辑。
 func TestUsageClass(t *testing.T) {
 	tests := []struct {
-		name             string
-		pct              float64
-		want             string
+		name string
+		pct  float64
+		want string
 	}{
 		{"正常", 50.0, ""},
 		{"警告阈值", 80.0, "cell-warn"},

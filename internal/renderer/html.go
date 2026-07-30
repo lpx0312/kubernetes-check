@@ -35,37 +35,37 @@ func RenderHTML(rep *report.Report, w io.Writer) error {
 // 模板只做展示，不做计算。所有格式化、阈值判定都在此处预计算成字符串/class。
 
 type htmlReportData struct {
-	Cluster     string
-	GeneratedAt string
-	Summary     htmlSummary
-	HasNodes    bool
-	NodeRows    []htmlNodeRow
-	HasStorage  bool
-	StorageRows []htmlStorageRow
-	HasOrphanPV bool
+	Cluster      string
+	GeneratedAt  string
+	Summary      htmlSummary
+	HasNodes     bool
+	NodeRows     []htmlNodeRow
+	HasStorage   bool
+	StorageRows  []htmlStorageRow
+	HasOrphanPV  bool
 	OrphanPVRows []htmlOrphanPVRow
-	HasAbnormal bool
+	HasAbnormal  bool
 	AbnormalRows []htmlAbnormalRow
-	HasRestart  bool
-	RestartRows []htmlRestartRow
-	Notes       []string
+	HasRestart   bool
+	RestartRows  []htmlRestartRow
+	Notes        []string
 }
 
 type htmlSummary struct {
-	TotalNodes, AbnormalNodes  int
-	TotalPods, AbnormalPods    int
-	RestartedPods              int
-	AbnormalPVC, OrphanPV      int
-	OverallHealth              string
+	TotalNodes, AbnormalNodes int
+	TotalPods, AbnormalPods   int
+	RestartedPods             int
+	AbnormalPVC, OrphanPV     int
+	OverallHealth             string
 }
 
 type htmlNodeRow struct {
-	NodeName, IP, Status string
+	NodeName, IP, Status        string
 	CPUDisplay, TotalCPUDisplay string
 	MemDisplay, TotalMemDisplay string
-	CPUUsage, MemoryUsage float64 // 使用率，模板渲染百分比
-	CPUClass, MemClass string // cell-warn / cell-severe / 空
-	MemOverPct bool // 内存使用率>100%，通常是 page cache 假象，模板加标记说明
+	CPUUsage, MemoryUsage       float64 // 使用率，模板渲染百分比
+	CPUClass, MemClass          string  // cell-warn / cell-severe / 空
+	MemOverPct                  bool    // 内存使用率>100%，通常是 page cache 假象，模板加标记说明
 }
 
 type htmlAbnormalRow struct {
@@ -73,24 +73,24 @@ type htmlAbnormalRow struct {
 }
 
 type htmlRestartRow struct {
-	Namespace, Name, Phase, NodeIP string
-	RestartCount                   int
+	Namespace, Name, Phase, NodeIP    string
+	RestartCount                      int
 	RestartTimeDisplay, Reason, Ready string
 }
 
 type htmlStorageRow struct {
-	Namespace, Name, Phase, StorageClass string
+	Namespace, Name, Phase, StorageClass        string
 	RequestedDisplay, UsedDisplay, UsageDisplay string
-	UsagePct float64
-	UsageClass string // cell-warn / cell-severe / 空
-	PVName, PVPhase string
-	PhaseClass string // PVC 状态着色
+	UsagePct                                    float64
+	UsageClass                                  string // cell-warn / cell-severe / 空
+	PVName, PVPhase                             string
+	PhaseClass                                  string // PVC 状态着色
 }
 
 type htmlOrphanPVRow struct {
 	Name, Phase, ReclaimPolicy, AccessModes, BoundNode string
-	CapacityDisplay string
-	PhaseClass string // Released/Failed 着色
+	CapacityDisplay                                    string
+	PhaseClass                                         string // Released/Failed 着色
 }
 
 // buildHTMLData 把 report.Report 转换为模板可用的 view model。
@@ -156,44 +156,44 @@ func buildHTMLData(rep *report.Report) htmlReportData {
 
 	for _, r := range rep.RestartRows {
 		data.RestartRows = append(data.RestartRows, htmlRestartRow{
-			Namespace:         r.Namespace,
-			Name:              r.Name,
-			Phase:             r.Phase,
-			NodeIP:            r.NodeIP,
-			RestartCount:      r.RestartCount,
+			Namespace:          r.Namespace,
+			Name:               r.Name,
+			Phase:              r.Phase,
+			NodeIP:             r.NodeIP,
+			RestartCount:       r.RestartCount,
 			RestartTimeDisplay: formatTimeHTML(r.RestartTime, loc),
-			Reason:            r.Reason,
-			Ready:             r.Ready,
+			Reason:             r.Reason,
+			Ready:              r.Ready,
 		})
 	}
 
 	for _, s := range rep.StorageRows {
 		row := htmlStorageRow{
-			Namespace:         s.Namespace,
-			Name:              s.Name,
-			Phase:             s.Phase,
-			StorageClass:      s.StorageClass,
-			RequestedDisplay:  formatGi(s.RequestedGi),
-			UsedDisplay:       formatGi(s.UsedGi),
-			UsagePct:          s.UsagePct,
-			UsageDisplay:      formatUsageDisplay(s.Mounted, s.UsagePct),
-			UsageClass:        pvcUsageClass(s.Mounted, s.UsagePct),
-			PVName:            s.PVName,
-			PVPhase:           s.PVPhase,
-			PhaseClass:        pvcPhaseClass(s.Phase),
+			Namespace:        s.Namespace,
+			Name:             s.Name,
+			Phase:            s.Phase,
+			StorageClass:     s.StorageClass,
+			RequestedDisplay: formatGi(s.RequestedGi),
+			UsedDisplay:      formatGi(s.UsedGi),
+			UsagePct:         s.UsagePct,
+			UsageDisplay:     formatUsageDisplay(s.Mounted, s.UsagePct),
+			UsageClass:       pvcUsageClass(s.Mounted, s.UsagePct),
+			PVName:           s.PVName,
+			PVPhase:          s.PVPhase,
+			PhaseClass:       pvcPhaseClass(s.Phase),
 		}
 		data.StorageRows = append(data.StorageRows, row)
 	}
 
 	for _, p := range rep.OrphanPVRows {
 		data.OrphanPVRows = append(data.OrphanPVRows, htmlOrphanPVRow{
-			Name:           p.Name,
-			Phase:          p.Phase,
-			ReclaimPolicy:  p.ReclaimPolicy,
-			AccessModes:    p.AccessModes,
-			BoundNode:      boundNodeDisplay(p.BoundNode),
+			Name:            p.Name,
+			Phase:           p.Phase,
+			ReclaimPolicy:   p.ReclaimPolicy,
+			AccessModes:     p.AccessModes,
+			BoundNode:       boundNodeDisplay(p.BoundNode),
 			CapacityDisplay: formatGi(p.CapacityGi),
-			PhaseClass:     pvcPhaseClass(p.Phase),
+			PhaseClass:      pvcPhaseClass(p.Phase),
 		})
 	}
 

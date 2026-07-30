@@ -54,14 +54,14 @@ func renderRestartPods(rep *report.Report, w io.Writer) {
 	// 8列：命名空间、Pod名称、状态、节点IP、重启次数、最后重启时间、重启原因、就绪状态
 	table.SetHeader([]string{"命名空间", "Pod名称", "状态", "节点IP", "重启次数", "最后重启时间", "重启原因", "就绪状态"})
 	table.SetColumnAlignment([]int{
-		tablewriter.ALIGN_LEFT,  // Namespace
-		tablewriter.ALIGN_LEFT,  // PodName
-		tablewriter.ALIGN_CENTER,// PodStatus
-		tablewriter.ALIGN_LEFT,  // NodeIP
-		tablewriter.ALIGN_CENTER,// Restart
-		tablewriter.ALIGN_LEFT,  // RestartTime
-		tablewriter.ALIGN_LEFT,  // RestartReason
-		tablewriter.ALIGN_CENTER,// READY
+		tablewriter.ALIGN_LEFT,   // Namespace
+		tablewriter.ALIGN_LEFT,   // PodName
+		tablewriter.ALIGN_CENTER, // PodStatus
+		tablewriter.ALIGN_LEFT,   // NodeIP
+		tablewriter.ALIGN_CENTER, // Restart
+		tablewriter.ALIGN_LEFT,   // RestartTime
+		tablewriter.ALIGN_LEFT,   // RestartReason
+		tablewriter.ALIGN_CENTER, // READY
 	})
 	table.SetHeaderColor(
 		tablewriter.Colors{tablewriter.Bold, tablewriter.FgGreenColor},
@@ -112,13 +112,13 @@ func renderAbnormalPods(rep *report.Report, w io.Writer) {
 	// 7列：命名空间、Pod名称、状态、节点IP、就绪状态、运行时长、容器状态
 	table.SetHeader([]string{"命名空间", "Pod名称", "状态", "节点IP", "就绪状态", "运行时长", "容器状态"})
 	table.SetColumnAlignment([]int{
-		tablewriter.ALIGN_LEFT,  // Namespace
-		tablewriter.ALIGN_LEFT,  // PodName
-		tablewriter.ALIGN_CENTER,// PodStatus
-		tablewriter.ALIGN_LEFT,  // NodeIP
-		tablewriter.ALIGN_CENTER,// READY
-		tablewriter.ALIGN_RIGHT, // AGE
-		tablewriter.ALIGN_LEFT,  // ContainerStatus
+		tablewriter.ALIGN_LEFT,   // Namespace
+		tablewriter.ALIGN_LEFT,   // PodName
+		tablewriter.ALIGN_CENTER, // PodStatus
+		tablewriter.ALIGN_LEFT,   // NodeIP
+		tablewriter.ALIGN_CENTER, // READY
+		tablewriter.ALIGN_RIGHT,  // AGE
+		tablewriter.ALIGN_LEFT,   // ContainerStatus
 	})
 	table.SetHeaderColor(
 		tablewriter.Colors{tablewriter.Bold, tablewriter.FgGreenColor},
@@ -186,15 +186,15 @@ func renderNodes(rep *report.Report, w io.Writer) {
 		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiYellowColor},
 	)
 	table.SetColumnColor(
-		tablewriter.Colors{tablewriter.FgHiGreenColor},     // 节点名称
-		tablewriter.Colors{tablewriter.FgHiCyanColor},      // IP地址
-		tablewriter.Colors{tablewriter.FgHiWhiteColor},     // CPU使用量
-		tablewriter.Colors{tablewriter.FgHiMagentaColor},   // 总CPU
-		tablewriter.Colors{tablewriter.FgHiYellowColor},    // CPU使用率%
-		tablewriter.Colors{tablewriter.FgHiBlueColor},      // 内存使用量
-		tablewriter.Colors{tablewriter.FgHiCyanColor},      // 总内存
-		tablewriter.Colors{tablewriter.FgHiMagentaColor},   // 内存使用率%
-		tablewriter.Colors{tablewriter.FgHiYellowColor},    // 状态
+		tablewriter.Colors{tablewriter.FgHiGreenColor},   // 节点名称
+		tablewriter.Colors{tablewriter.FgHiCyanColor},    // IP地址
+		tablewriter.Colors{tablewriter.FgHiWhiteColor},   // CPU使用量
+		tablewriter.Colors{tablewriter.FgHiMagentaColor}, // 总CPU
+		tablewriter.Colors{tablewriter.FgHiYellowColor},  // CPU使用率%
+		tablewriter.Colors{tablewriter.FgHiBlueColor},    // 内存使用量
+		tablewriter.Colors{tablewriter.FgHiCyanColor},    // 总内存
+		tablewriter.Colors{tablewriter.FgHiMagentaColor}, // 内存使用率%
+		tablewriter.Colors{tablewriter.FgHiYellowColor},  // 状态
 	)
 	table.SetBorder(false)
 

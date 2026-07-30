@@ -4,12 +4,13 @@ package renderer
 // 样式全部内联到 <style>，生成的报告单文件自包含，浏览器/邮件打开即用，无外部依赖。
 //
 // 模板字段说明（对应 renderer.htmlReportData）：
-//   .Cluster .GeneratedAt          - 报告头
-//   .Summary.*                     - 摘要卡片
-//   .HasNodes .NodeRows            - 节点章节
-//   .HasAbnormal .AbnormalRows     - 异常 Pod 章节
-//   .HasRestart .RestartRows       - 重启 Pod 章节
-//   .Notes                         - 收集提示
+//
+//	.Cluster .GeneratedAt          - 报告头
+//	.Summary.*                     - 摘要卡片
+//	.HasNodes .NodeRows            - 节点章节
+//	.HasAbnormal .AbnormalRows     - 异常 Pod 章节
+//	.HasRestart .RestartRows       - 重启 Pod 章节
+//	.Notes                         - 收集提示
 //
 // 阈值告警：CPU/内存超阈值的单元格由 Go 侧预计算 class（cell-warn/cell-severe），
 // 模板只负责输出 class，不在模板里做数值比较（保持模板简单）。

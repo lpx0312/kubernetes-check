@@ -43,12 +43,12 @@ type Config struct {
 // nodeCache 在 worker pool 间共享，sync.Map 保证并发安全。
 // restClient 用于调用 kubelet /stats/summary（Node 接口无 ProxyGet，需 REST client 代理）。
 type Collector struct {
-	clientset *kubernetes.Clientset
-	metrics   *metrics.Clientset
+	clientset  *kubernetes.Clientset
+	metrics    *metrics.Clientset
 	restClient rest.Interface
-	nodeCache sync.Map
-	cfg       Config
-	cluster   string // kubeconfig 当前 context 名，报告头展示用
+	nodeCache  sync.Map
+	cfg        Config
+	cluster    string // kubeconfig 当前 context 名，报告头展示用
 }
 
 // New 构造 Collector：加载 kubeconfig、创建 clientset 与 metrics client、提升速率限制。
@@ -133,8 +133,8 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 //   - 警告：异常 Pod / 重启 Pod / Pending 的 PVC(卡绑定) / Released 的孤儿 PV / PVC 使用率 85%-95%
 //   - 健康：以上都不满足
 func (c *Collector) computeSummary(rep *report.Report) {
-	abnormalNodes := 0            // 真异常节点（NotReady 或 指标不可用且异常）
-	metricsUnavailableNodes := 0  // 仅指标采集失败但节点 Ready 的（kubelet stats 坏等）
+	abnormalNodes := 0           // 真异常节点（NotReady 或 指标不可用且异常）
+	metricsUnavailableNodes := 0 // 仅指标采集失败但节点 Ready 的（kubelet stats 坏等）
 	for _, n := range rep.NodeRows {
 		switch n.Status {
 		case "指标不可用":

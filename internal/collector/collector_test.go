@@ -177,9 +177,9 @@ func TestAnalyzeContainers(t *testing.T) {
 				RestartCount: 3,
 				LastTerminationState: v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{
-						FinishedAt:   metav1.Time{Time: now.Add(-2 * 24 * time.Hour)},
-						Reason:       "OOMKilled",
-						ExitCode:     137,
+						FinishedAt: metav1.Time{Time: now.Add(-2 * 24 * time.Hour)},
+						Reason:     "OOMKilled",
+						ExitCode:   137,
 					},
 				},
 			},
