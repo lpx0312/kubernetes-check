@@ -139,6 +139,14 @@ const reportHTMLTemplate = `<!DOCTYPE html>
       <div class="num {{if gt .Summary.OrphanPV 0}}num-warn{{else}}num-ok{{end}}">{{.Summary.OrphanPV}}</div>
       <div class="label">孤儿 PV</div>
     </div>
+    <div class="stat-card">
+      <div class="num {{if gt .Summary.WarningEvents 0}}num-warn{{else}}num-ok{{end}}">{{.Summary.WarningEvents}}</div>
+      <div class="label">Warning 事件</div>
+    </div>
+    <div class="stat-card">
+      <div class="num {{if gt .Summary.AbnormalComponents 0}}num-severe{{else}}num-ok{{end}}">{{.Summary.AbnormalComponents}}</div>
+      <div class="label">异常组件</div>
+    </div>
   </div>
 
   {{range .Notes}}<div class="notes">{{.}}</div>{{end}}
@@ -151,7 +159,7 @@ const reportHTMLTemplate = `<!DOCTYPE html>
       <tr>
         <th>节点名称</th><th>IP 地址</th>
         <th>CPU 使用</th><th>CPU 使用率</th>
-        <th>内存使用</th><th>内存使用率</th><th>状态</th>
+        <th>内存使用</th><th>内存使用率</th><th>状态</th><th>压力</th>
       </tr>
       {{range .NodeRows}}
       <tr>
@@ -162,9 +170,34 @@ const reportHTMLTemplate = `<!DOCTYPE html>
         <td>{{.MemDisplay}} / {{.TotalMemDisplay}}</td>
         <td class="{{.MemClass}}">{{printf "%.1f%%" .MemoryUsage}}{{if .MemOverPct}} ⚠️<span title="workingSet 含 page cache，且分母 Allocatable 已扣系统预留，>100% 多为假象，看 free -m 的 available">含cache</span>{{end}}</td>
         <td class="{{if eq .Status "正常"}}cell-ok{{else if eq .Status "指标不可用"}}cell-warn{{else if eq .Status "异常(指标不可用)"}}cell-severe{{else}}cell-severe{{end}}">{{.Status}}</td>
+        <td class="{{.PressureClass}}">{{.Pressures}}</td>
       </tr>
       {{end}}
     </table>
+  </div>
+  {{end}}
+
+  <!-- 控制平面 -->
+  {{if .HasControlPlane}}
+  <div class="section">
+    <h2>🎛️ 控制平面 <span class="count">({{len .ControlPlaneRows}})</span></h2>
+    <table>
+      <tr>
+        <th>组件</th><th>期望实例数</th><th>Ready</th><th>异常</th><th>健康状态</th>
+      </tr>
+      {{range .ControlPlaneRows}}
+      <tr>
+        <td>{{.Component}}</td>
+        <td>{{.Expected}}</td>
+        <td>{{.Ready}}</td>
+        <td>{{.Abnormal}}</td>
+        <td class="{{.HealthClass}}">{{.Health}}</td>
+      </tr>
+      {{end}}
+    </table>
+    {{range .ControlPlaneRows}}{{if and .Message (or (eq .Health "异常") (eq .Health "未检测到"))}}
+    <div style="margin-top:6px;color:#7f8c8d">· {{.Component}}: {{.Message}}</div>
+    {{end}}{{end}}
   </div>
   {{end}}
 
@@ -271,6 +304,35 @@ const reportHTMLTemplate = `<!DOCTYPE html>
     </table>
     {{else}}
     <div class="empty">✓ 无近期重启的 Pod</div>
+    {{end}}
+  </div>
+
+  <!-- Warning 事件（根因定位） -->
+  <div class="section">
+    <h2>🔔 Warning 事件 <span class="count">({{len .EventRows}})</span></h2>
+    {{if .HasEvents}}
+    <div class="notes" style="background:#fff8e1;color:#8a6d3b">
+      以下 Warning 事件已按资源+原因去重，展示最近 50 类。可用于定位 Pod 异常根因（如调度失败、镜像拉取失败、挂载失败）。
+    </div>
+    <table>
+      <tr>
+        <th>命名空间</th><th>资源类型</th><th>资源名</th>
+        <th>原因</th><th>消息</th><th>次数</th><th>最后发生</th>
+      </tr>
+      {{range .EventRows}}
+      <tr>
+        <td>{{.Namespace}}</td>
+        <td>{{.Kind}}</td>
+        <td>{{.ObjectName}}</td>
+        <td class="cell-warn">{{.Reason}}</td>
+        <td>{{.Message}}</td>
+        <td>{{.CountDisplay}}</td>
+        <td>{{.LastTimeDisplay}}</td>
+      </tr>
+      {{end}}
+    </table>
+    {{else}}
+    <div class="empty">✓ 无 Warning 事件</div>
     {{end}}
   </div>
 

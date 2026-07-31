@@ -6,11 +6,13 @@ import "time"
 
 // Mode 标识本次巡检的检查模式，决定 Report 渲染哪类行。
 const (
-	ModeRestart  = "restart"  // 重启检查：展示 N 天内重启的 Pod
-	ModeAbnormal = "abnormal" // 异常检查：展示状态异常的 Pod
-	ModeNode     = "node"     // 节点监控：展示节点资源使用情况
-	ModeStorage  = "storage"  // 存储检查：展示 PVC 绑定状态与使用量
-	ModeFull     = "full"     // 全量巡检：节点 + 异常 + 重启 + 存储，用于生成完整报告
+	ModeRestart       = "restart"       // 重启检查：展示 N 天内重启的 Pod
+	ModeAbnormal      = "abnormal"      // 异常检查：展示状态异常的 Pod
+	ModeNode          = "node"          // 节点监控：展示节点资源使用情况
+	ModeStorage       = "storage"       // 存储检查：展示 PVC 绑定状态与使用量
+	ModeEvent         = "event"         // 事件检查：展示 Warning 事件
+	ModeControlPlane  = "controlplane"  // 控制平面检查：apiserver/etcd/scheduler/cm 健康
+	ModeFull          = "full"          // 全量巡检：所有维度，用于生成完整报告
 )
 
 // 健康度等级常量，供 ReportSummary.OverallHealth 使用。
@@ -55,7 +57,8 @@ type NodeRow struct {
 	TotalMemory int64 // Mi
 	CPUUsage    float64
 	MemoryUsage float64
-	Status      string // "正常" / "异常"
+	Status      string // "正常" / "异常"（基于 NodeReady）
+	Pressures   string // 压力状态，"无" 或 "内存压力,磁盘压力" 等（基于 MemoryPressure/DiskPressure/PIDPressure/NetworkUnavailable）
 }
 
 // StorageRow 存储检查的一行结果（PVC 维度）。
@@ -86,16 +89,41 @@ type OrphanPVRow struct {
 	CapacityGi    int64
 }
 
+// EventRow 事件检查的一行结果（Warning 事件，已按资源+原因去重聚合）。
+type EventRow struct {
+	Namespace  string    // 事件发生的命名空间（节点级事件为空）
+	Kind       string    // 涉及资源类型，如 Pod / Node / PersistentVolumeClaim
+	ObjectName string    // 涉及资源名
+	Reason     string    // 事件原因，如 FailedMount / FailedScheduling / ImagePullBackOff
+	Message    string    // 事件消息（详细描述）
+	Count      int32     // 发生次数（去重聚合后）
+	LastTime   time.Time // 最后一次发生时间
+}
+
+// ControlPlaneRow 控制平面组件健康状态的一行结果。
+type ControlPlaneRow struct {
+	Component   string // etcd / kube-apiserver / kube-scheduler / kube-controller-manager
+	Expected    int    // 期望实例数（master 节点数）
+	Ready       int    // Ready 的 Pod 数
+	Abnormal    int    // 非 Ready 的 Pod 数
+	Health      string // 健康 / 异常 / 未检测到
+	Message     string // 补充说明（如"未检测到，可能为外部 etcd"或异常 Pod 名）
+}
+
 // ReportSummary 巡检摘要，由全量模式下 Collector 计算，渲染到报告顶部。
 type ReportSummary struct {
-	TotalNodes    int
-	AbnormalNodes int // NotReady 或指标获取失败的节点数
-	TotalPods     int
-	AbnormalPods  int
-	RestartedPods int
-	AbnormalPVC   int    // Pending/Lost 的 PVC 或使用率超阈值的 PVC
-	OrphanPV      int    // Released/Failed 的孤儿 PV
-	OverallHealth string // Health* 常量之一
+	TotalNodes       int
+	AbnormalNodes    int // NotReady 或指标获取失败的节点数
+	PressuredNodes   int // 存在 MemoryPressure/DiskPressure/PIDPressure/NetworkUnavailable 的节点数
+	TotalPods        int
+	AbnormalPods     int
+	RestartedPods    int
+	AbnormalPVC      int    // Pending/Lost 的 PVC 或使用率超阈值的 PVC
+	OrphanPV         int    // Released/Failed 的孤儿 PV
+	WarningEvents    int    // Warning 事件数（去重后）
+	AbnormalComponents int  // 控制平面异常组件数（etcd 未检测到不算）
+	APIServerHealthy bool   // apiserver /healthz 是否健康
+	OverallHealth    string // Health* 常量之一
 }
 
 // Report 一次巡检的完整结果，是 Collector 与 Renderer 之间的契约。
@@ -105,11 +133,13 @@ type Report struct {
 	GeneratedAt time.Time
 	TotalPods   int // 参与本次巡检的 Pod 总数
 
-	RestartRows  []RestartPodRow
-	AbnormalRows []AbnormalPodRow
-	NodeRows     []NodeRow
-	StorageRows  []StorageRow
-	OrphanPVRows []OrphanPVRow
+	RestartRows      []RestartPodRow
+	AbnormalRows     []AbnormalPodRow
+	NodeRows         []NodeRow
+	StorageRows      []StorageRow
+	OrphanPVRows     []OrphanPVRow
+	EventRows        []EventRow
+	ControlPlaneRows []ControlPlaneRow
 
 	// Summary 全量模式下的巡检摘要，由 computeSummary 填充。
 	// 非全量模式（终端表格）下为零值，不影响渲染。

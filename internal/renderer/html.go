@@ -44,6 +44,10 @@ type htmlReportData struct {
 	StorageRows  []htmlStorageRow
 	HasOrphanPV  bool
 	OrphanPVRows []htmlOrphanPVRow
+	HasEvents    bool
+	EventRows    []htmlEventRow
+	HasControlPlane bool
+	ControlPlaneRows []htmlControlPlaneRow
 	HasAbnormal  bool
 	AbnormalRows []htmlAbnormalRow
 	HasRestart   bool
@@ -52,11 +56,14 @@ type htmlReportData struct {
 }
 
 type htmlSummary struct {
-	TotalNodes, AbnormalNodes int
-	TotalPods, AbnormalPods   int
-	RestartedPods             int
-	AbnormalPVC, OrphanPV     int
-	OverallHealth             string
+	TotalNodes, AbnormalNodes   int
+	PressuredNodes              int
+	TotalPods, AbnormalPods     int
+	RestartedPods               int
+	AbnormalPVC, OrphanPV       int
+	WarningEvents               int
+	AbnormalComponents          int
+	OverallHealth               string
 }
 
 type htmlNodeRow struct {
@@ -66,6 +73,16 @@ type htmlNodeRow struct {
 	CPUUsage, MemoryUsage       float64 // 使用率，模板渲染百分比
 	CPUClass, MemClass          string  // cell-warn / cell-severe / 空
 	MemOverPct                  bool    // 内存使用率>100%，通常是 page cache 假象，模板加标记说明
+	Pressures                   string  // 压力状态
+	PressureClass               string  // cell-severe（有压力）/ 空
+}
+
+type htmlEventRow struct {
+	Namespace, Kind, ObjectName, Reason, Message, CountDisplay, LastTimeDisplay string
+}
+
+type htmlControlPlaneRow struct {
+	Component, Expected, Ready, Abnormal, Health, Message, HealthClass string
 }
 
 type htmlAbnormalRow struct {
@@ -98,28 +115,37 @@ func buildHTMLData(rep *report.Report) htmlReportData {
 	loc, _ := time.LoadLocation(beijingTZ)
 
 	data := htmlReportData{
-		Cluster:     rep.Cluster,
-		GeneratedAt: rep.GeneratedAt.In(loc).Format("2006-01-02 15:04:05"),
-		Notes:       rep.Notes,
-		HasNodes:    len(rep.NodeRows) > 0,
-		HasStorage:  len(rep.StorageRows) > 0,
-		HasOrphanPV: len(rep.OrphanPVRows) > 0,
-		HasAbnormal: len(rep.AbnormalRows) > 0,
-		HasRestart:  len(rep.RestartRows) > 0,
+		Cluster:         rep.Cluster,
+		GeneratedAt:     rep.GeneratedAt.In(loc).Format("2006-01-02 15:04:05"),
+		Notes:           rep.Notes,
+		HasNodes:        len(rep.NodeRows) > 0,
+		HasStorage:      len(rep.StorageRows) > 0,
+		HasOrphanPV:     len(rep.OrphanPVRows) > 0,
+		HasEvents:       len(rep.EventRows) > 0,
+		HasControlPlane: len(rep.ControlPlaneRows) > 0,
+		HasAbnormal:     len(rep.AbnormalRows) > 0,
+		HasRestart:      len(rep.RestartRows) > 0,
 	}
 	data.Summary = htmlSummary{
-		TotalNodes:    rep.Summary.TotalNodes,
-		AbnormalNodes: rep.Summary.AbnormalNodes,
-		TotalPods:     rep.Summary.TotalPods,
-		AbnormalPods:  rep.Summary.AbnormalPods,
-		RestartedPods: rep.Summary.RestartedPods,
-		AbnormalPVC:   rep.Summary.AbnormalPVC,
-		OrphanPV:      rep.Summary.OrphanPV,
-		OverallHealth: rep.Summary.OverallHealth,
+		TotalNodes:        rep.Summary.TotalNodes,
+		AbnormalNodes:     rep.Summary.AbnormalNodes,
+		PressuredNodes:    rep.Summary.PressuredNodes,
+		TotalPods:         rep.Summary.TotalPods,
+		AbnormalPods:      rep.Summary.AbnormalPods,
+		RestartedPods:     rep.Summary.RestartedPods,
+		AbnormalPVC:       rep.Summary.AbnormalPVC,
+		OrphanPV:          rep.Summary.OrphanPV,
+		WarningEvents:     rep.Summary.WarningEvents,
+		AbnormalComponents: rep.Summary.AbnormalComponents,
+		OverallHealth:     rep.Summary.OverallHealth,
 	}
 
 	for _, n := range rep.NodeRows {
 		memOver := n.MemoryUsage > 100
+		pressureClass := ""
+		if n.Pressures != "无" && n.Pressures != "" {
+			pressureClass = "cell-severe"
+		}
 		data.NodeRows = append(data.NodeRows, htmlNodeRow{
 			NodeName:        n.NodeName,
 			IP:              n.IP,
@@ -133,6 +159,8 @@ func buildHTMLData(rep *report.Report) htmlReportData {
 			CPUClass:        usageClass(n.CPUUsage, cpuWarnPct, cpuSeverePct),
 			MemClass:        usageClass(n.MemoryUsage, memWarnPct, memSeverePct),
 			MemOverPct:      memOver,
+			Pressures:       n.Pressures,
+			PressureClass:   pressureClass,
 		})
 		// 内存超 100% 的节点追加说明到 Notes（口径假象，非真实内存压力）
 		if memOver {
@@ -140,6 +168,40 @@ func buildHTMLData(rep *report.Report) htmlReportData {
 				"节点 %s 内存显示 %.0f%% 超过 100%%：指标含 page cache(workingSet) 且分母用 Allocatable(已扣系统预留)，多为假象，请以 free -m 的 available 为准。",
 				n.NodeName, n.MemoryUsage))
 		}
+	}
+
+	for _, e := range rep.EventRows {
+		ns := e.Namespace
+		if ns == "" {
+			ns = "-"
+		}
+		data.EventRows = append(data.EventRows, htmlEventRow{
+			Namespace:       ns,
+			Kind:            e.Kind,
+			ObjectName:      e.ObjectName,
+			Reason:          e.Reason,
+			Message:         e.Message,
+			CountDisplay:    fmt.Sprintf("%d", e.Count),
+			LastTimeDisplay: formatTimeHTML(e.LastTime, loc),
+		})
+	}
+
+	for _, c := range rep.ControlPlaneRows {
+		healthClass := "cell-ok"
+		if c.Health == "异常" {
+			healthClass = "cell-severe"
+		} else if c.Health == "未检测到" {
+			healthClass = ""
+		}
+		data.ControlPlaneRows = append(data.ControlPlaneRows, htmlControlPlaneRow{
+			Component:   c.Component,
+			Expected:    fmt.Sprintf("%d", c.Expected),
+			Ready:       fmt.Sprintf("%d", c.Ready),
+			Abnormal:    fmt.Sprintf("%d", c.Abnormal),
+			Health:      c.Health,
+			Message:     c.Message,
+			HealthClass: healthClass,
+		})
 	}
 
 	for _, a := range rep.AbnormalRows {

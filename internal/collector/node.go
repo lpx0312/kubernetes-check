@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -110,7 +111,33 @@ func (c *Collector) collectNodeRow(ctx context.Context, node *v1.Node) (*report.
 		CPUUsage:    cpuUsagePercent,
 		MemoryUsage: memoryUsagePercent,
 		Status:      status,
+		Pressures:   extractNodePressures(node),
 	}, nil
+}
+
+// extractNodePressures 解析节点的压力状态：MemoryPressure/DiskPressure/PIDPressure/NetworkUnavailable。
+// 任一为 True 则收集对应名称，全部正常返回"无"。
+func extractNodePressures(node *v1.Node) string {
+	var pressures []string
+	for _, cond := range node.Status.Conditions {
+		if cond.Status != v1.ConditionTrue {
+			continue
+		}
+		switch cond.Type {
+		case v1.NodeMemoryPressure:
+			pressures = append(pressures, "内存压力")
+		case v1.NodeDiskPressure:
+			pressures = append(pressures, "磁盘压力")
+		case v1.NodePIDPressure:
+			pressures = append(pressures, "PID压力")
+		case v1.NodeNetworkUnavailable:
+			pressures = append(pressures, "网络不可用")
+		}
+	}
+	if len(pressures) == 0 {
+		return "无"
+	}
+	return strings.Join(pressures, ",")
 }
 
 // degradedNodeRow 在节点指标获取失败时，返回一个占位行。
@@ -149,5 +176,6 @@ func (c *Collector) degradedNodeRow(ctx context.Context, node *v1.Node, metricsE
 		CPUUsage:    0,
 		MemoryUsage: 0,
 		Status:      status,
+		Pressures:   extractNodePressures(node),
 	}, nil
 }

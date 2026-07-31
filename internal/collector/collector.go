@@ -113,12 +113,18 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 		c.collectPods(ctx, rep, false)
 	case report.ModeStorage:
 		c.collectStorage(ctx, rep)
+	case report.ModeEvent:
+		c.collectEvents(ctx, rep)
+	case report.ModeControlPlane:
+		c.collectControlPlane(ctx, rep)
 	case report.ModeFull:
-		// 全量巡检：一次采齐节点 + 异常 + 重启 + 存储，复用现有采集方法
+		// 全量巡检：一次采齐所有维度，复用现有采集方法
 		c.collectNodes(ctx, rep)
-		c.collectPods(ctx, rep, true)  // 异常
-		c.collectPods(ctx, rep, false) // 重启
-		c.collectStorage(ctx, rep)     // 存储（PVC + 孤儿PV + SC健康）
+		c.collectPods(ctx, rep, true)     // 异常
+		c.collectPods(ctx, rep, false)    // 重启
+		c.collectStorage(ctx, rep)        // 存储（PVC + 孤儿PV）
+		c.collectEvents(ctx, rep)         // Warning 事件
+		c.collectControlPlane(ctx, rep)   // 控制平面健康
 		c.computeSummary(rep)
 	default:
 		c.collectPods(ctx, rep, false)
@@ -135,14 +141,16 @@ func (c *Collector) Collect(ctx context.Context) (*report.Report, error) {
 func (c *Collector) computeSummary(rep *report.Report) {
 	abnormalNodes := 0           // 真异常节点（NotReady 或 指标不可用且异常）
 	metricsUnavailableNodes := 0 // 仅指标采集失败但节点 Ready 的（kubelet stats 坏等）
+	pressuredNodes := 0          // 存在压力状态的节点
 	for _, n := range rep.NodeRows {
 		switch n.Status {
 		case "指标不可用":
-			// 节点 Ready，只是 metrics 没抓到 —— 算警告，不算严重
 			metricsUnavailableNodes++
 		case "异常", "异常(指标不可用)":
-			// 节点 NotReady —— 真严重
 			abnormalNodes++
+		}
+		if n.Pressures != "无" && n.Pressures != "" {
+			pressuredNodes++
 		}
 	}
 
@@ -157,32 +165,51 @@ func (c *Collector) computeSummary(rep *report.Report) {
 		}
 	}
 	orphanPV := len(rep.OrphanPVRows)
-	// Failed PV（孤儿表里的）也算严重
 	for _, p := range rep.OrphanPVRows {
 		if p.Phase == "Failed" {
 			storageSevere = true
 		}
 	}
 
+	// 统计控制平面维度
+	abnormalComponents, apiSevere := 0, false
+	for _, cp := range rep.ControlPlaneRows {
+		// etcd "未检测到" 不算异常（外部 etcd）
+		if cp.Health == "异常" {
+			abnormalComponents++
+		}
+	}
+	// apiserver 探活失败是最严重的
+	if len(rep.ControlPlaneRows) > 0 {
+		for _, note := range rep.Notes {
+			if strings.Contains(note, "apiserver /healthz 探活失败") {
+				apiSevere = true
+				break
+			}
+		}
+	}
+
 	summary := report.ReportSummary{
-		TotalNodes:    len(rep.NodeRows),
-		AbnormalNodes: abnormalNodes + metricsUnavailableNodes, // 摘要卡片合并展示
-		TotalPods:     rep.TotalPods,
-		AbnormalPods:  len(rep.AbnormalRows),
-		RestartedPods: len(rep.RestartRows),
-		AbnormalPVC:   abnormalPVC,
-		OrphanPV:      orphanPV,
+		TotalNodes:         len(rep.NodeRows),
+		AbnormalNodes:      abnormalNodes + metricsUnavailableNodes,
+		PressuredNodes:     pressuredNodes,
+		TotalPods:          rep.TotalPods,
+		AbnormalPods:       len(rep.AbnormalRows),
+		RestartedPods:      len(rep.RestartRows),
+		AbnormalPVC:        abnormalPVC,
+		OrphanPV:           orphanPV,
+		WarningEvents:      len(rep.EventRows),
+		AbnormalComponents: abnormalComponents,
 	}
 
 	// 健康度判定
-	// 严重：真异常节点(NotReady) / metrics-server 完全缺失 / 存储严重
-	// 警告：仅指标采集失败(节点Ready) / 异常Pod / 重启Pod / 存储警告
+	// 严重：apiserver 不健康 / 真异常节点(NotReady) / metrics-server 完全缺失 / 控制平面组件异常 / 存储严重
+	// 警告：仅指标采集失败 / 异常Pod / 重启Pod / 存储警告 / 压力节点 / Warning 事件
 	switch {
-	case abnormalNodes > 0 || c.metricsUnavailable(rep) || storageSevere:
+	case apiSevere || abnormalNodes > 0 || abnormalComponents > 0 || c.metricsUnavailable(rep) || storageSevere:
 		summary.OverallHealth = report.HealthSevere
-	case metricsUnavailableNodes > 0 || len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0 || abnormalPVC > 0 || orphanPV > 0:
-		summary.OverallHealth = report.HealthWarn
-	case len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0 || abnormalPVC > 0 || orphanPV > 0:
+	case metricsUnavailableNodes > 0 || pressuredNodes > 0 || len(rep.EventRows) > 0 ||
+		len(rep.AbnormalRows) > 0 || len(rep.RestartRows) > 0 || abnormalPVC > 0 || orphanPV > 0:
 		summary.OverallHealth = report.HealthWarn
 	default:
 		summary.OverallHealth = report.HealthOK

@@ -37,6 +37,10 @@ func Render(rep *report.Report, w io.Writer) {
 		renderRestartPods(rep, w)
 	case report.ModeStorage:
 		renderStorage(rep, w)
+	case report.ModeEvent:
+		renderEvents(rep, w)
+	case report.ModeControlPlane:
+		renderControlPlane(rep, w)
 	default:
 		renderRestartPods(rep, w)
 	}
@@ -154,15 +158,15 @@ func renderAbnormalPods(rep *report.Report, w io.Writer) {
 	table.Render()
 }
 
-// renderNodes 渲染节点资源监控表格（9 列）。
+// renderNodes 渲染节点资源监控表格（10 列，含压力状态）。
 func renderNodes(rep *report.Report, w io.Writer) {
 	if len(rep.NodeRows) == 0 {
 		return // Notes 已在 Render 入口输出降级提示
 	}
 
 	table := tablewriter.NewWriter(w)
-	// 9列：节点名称、IP地址、CPU使用量、总CPU、CPU使用率、内存使用量、总内存、内存使用率、状态
-	table.SetHeader([]string{"节点名称", "IP地址", "CPU使用量(cores)", "总CPU(cores)", "CPU使用率%", "内存使用量(Mi)", "总内存(Mi)", "内存使用率%", "状态"})
+	// 10列：节点名称、IP地址、CPU使用量、总CPU、CPU使用率、内存使用量、总内存、内存使用率、状态、压力
+	table.SetHeader([]string{"节点名称", "IP地址", "CPU使用量(cores)", "总CPU(cores)", "CPU使用率%", "内存使用量(Mi)", "总内存(Mi)", "内存使用率%", "状态", "压力状态"})
 	table.SetColumnAlignment([]int{
 		tablewriter.ALIGN_LEFT,   // 节点名称
 		tablewriter.ALIGN_LEFT,   // IP地址
@@ -173,29 +177,8 @@ func renderNodes(rep *report.Report, w io.Writer) {
 		tablewriter.ALIGN_RIGHT,  // 内存总量
 		tablewriter.ALIGN_RIGHT,  // 内存使用率
 		tablewriter.ALIGN_CENTER, // 状态
+		tablewriter.ALIGN_LEFT,   // 压力状态
 	})
-	table.SetHeaderColor(
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgGreenColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgWhiteColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgMagentaColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgYellowColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgBlueColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgCyanColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiMagentaColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.FgHiYellowColor},
-	)
-	table.SetColumnColor(
-		tablewriter.Colors{tablewriter.FgHiGreenColor},   // 节点名称
-		tablewriter.Colors{tablewriter.FgHiCyanColor},    // IP地址
-		tablewriter.Colors{tablewriter.FgHiWhiteColor},   // CPU使用量
-		tablewriter.Colors{tablewriter.FgHiMagentaColor}, // 总CPU
-		tablewriter.Colors{tablewriter.FgHiYellowColor},  // CPU使用率%
-		tablewriter.Colors{tablewriter.FgHiBlueColor},    // 内存使用量
-		tablewriter.Colors{tablewriter.FgHiCyanColor},    // 总内存
-		tablewriter.Colors{tablewriter.FgHiMagentaColor}, // 内存使用率%
-		tablewriter.Colors{tablewriter.FgHiYellowColor},  // 状态
-	)
 	table.SetBorder(false)
 
 	for _, r := range rep.NodeRows {
@@ -209,6 +192,7 @@ func renderNodes(rep *report.Report, w io.Writer) {
 			fmt.Sprintf("%dMi", r.TotalMemory),
 			fmt.Sprintf("%.1f%%", r.MemoryUsage),
 			r.Status,
+			r.Pressures,
 		})
 	}
 	table.Render()
@@ -273,6 +257,85 @@ func renderStorage(rep *report.Report, w io.Writer) {
 			})
 		}
 		table.Render()
+	}
+}
+
+// renderEvents 渲染 Warning 事件表格（7 列）。
+func renderEvents(rep *report.Report, w io.Writer) {
+	if len(rep.EventRows) == 0 {
+		fmt.Fprintln(w, "✓ 无 Warning 事件")
+		return
+	}
+	fmt.Fprintf(w, "发现 %d 类 Warning 事件（已按资源+原因去重）\n", len(rep.EventRows))
+
+	table := tablewriter.NewWriter(w)
+	// 7列：命名空间、资源类型、资源名、原因、消息、次数、最后时间
+	table.SetHeader([]string{"命名空间", "资源类型", "资源名", "原因", "消息", "次数", "最后发生时间"})
+	table.SetColumnAlignment([]int{
+		tablewriter.ALIGN_LEFT,   // 命名空间
+		tablewriter.ALIGN_CENTER, // 资源类型
+		tablewriter.ALIGN_LEFT,   // 资源名
+		tablewriter.ALIGN_LEFT,   // 原因
+		tablewriter.ALIGN_LEFT,   // 消息
+		tablewriter.ALIGN_CENTER, // 次数
+		tablewriter.ALIGN_LEFT,   // 时间
+	})
+	table.SetAutoWrapText(false) // 消息可能较长，不自动换行避免表格错乱
+	table.SetBorder(false)
+
+	for _, e := range rep.EventRows {
+		ns := e.Namespace
+		if ns == "" {
+			ns = "-" // 节点级事件无命名空间
+		}
+		table.Append([]string{
+			ns,
+			e.Kind,
+			e.ObjectName,
+			e.Reason,
+			e.Message,
+			fmt.Sprintf("%d", e.Count),
+			formatTime(e.LastTime),
+		})
+	}
+	table.Render()
+}
+
+// renderControlPlane 渲染控制平面组件健康表格（5 列）。
+func renderControlPlane(rep *report.Report, w io.Writer) {
+	if len(rep.ControlPlaneRows) == 0 {
+		fmt.Fprintln(w, "✓ 无控制平面数据")
+		return
+	}
+
+	table := tablewriter.NewWriter(w)
+	// 5列：组件、期望实例数、Ready数、异常数、健康状态
+	table.SetHeader([]string{"组件", "期望实例数", "Ready", "异常", "健康状态"})
+	table.SetColumnAlignment([]int{
+		tablewriter.ALIGN_LEFT,   // 组件
+		tablewriter.ALIGN_CENTER, // 期望
+		tablewriter.ALIGN_CENTER, // Ready
+		tablewriter.ALIGN_CENTER, // 异常
+		tablewriter.ALIGN_CENTER, // 健康
+	})
+	table.SetBorder(false)
+
+	for _, c := range rep.ControlPlaneRows {
+		table.Append([]string{
+			c.Component,
+			fmt.Sprintf("%d", c.Expected),
+			fmt.Sprintf("%d", c.Ready),
+			fmt.Sprintf("%d", c.Abnormal),
+			c.Health,
+		})
+	}
+	table.Render()
+
+	// 异常组件的详细消息
+	for _, c := range rep.ControlPlaneRows {
+		if c.Message != "" && (c.Health == "异常" || c.Health == "未检测到") {
+			fmt.Fprintf(w, "  · %s: %s\n", c.Component, c.Message)
+		}
 	}
 }
 
